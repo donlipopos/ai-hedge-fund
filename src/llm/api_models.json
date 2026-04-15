@@ -45,6 +45,11 @@
     "provider": "Kimi"
   },
   {
+    "display_name": "MiniMax M2.7",
+    "model_name": "MiniMax-M2.7",
+    "provider": "MiniMax"
+  },
+  {
     "display_name": "Kimi Latest (128k)",
     "model_name": "kimi-latest",
     "provider": "Kimi"

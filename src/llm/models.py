@@ -24,6 +24,7 @@ class ModelProvider(str, Enum):
     GROQ = "Groq"
     KIMI = "Kimi"
     META = "Meta"
+    MINIMAX = "MiniMax"
     MISTRAL = "Mistral"
     OPENAI = "OpenAI"
     OLLAMA = "Ollama"
@@ -220,6 +221,16 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
             print(f"API Key Error: Please make sure XAI_API_KEY is set in your .env file or provided via API keys.")
             raise ValueError("xAI API key not found. Please make sure XAI_API_KEY is set in your .env file or provided via API keys.")
         return ChatXAI(model=model_name, api_key=api_key)
+    elif model_provider == ModelProvider.MINIMAX:
+        api_key = (api_keys or {}).get("MINIMAX_API_KEY") or os.getenv("MINIMAX_API_KEY")
+        if not api_key:
+            # Try OPENCLAW_SERVICE_MANAGED_ENV_KEYS style env var (MINIMAX_KEY)
+            api_key = os.getenv("MINIMAX_KEY")
+        if not api_key:
+            print(f"API Key Error: Please make sure MINIMAX_API_KEY is set in your .env file or provided via API keys.")
+            raise ValueError("MiniMax API key not found. Please set MINIMAX_API_KEY or MINIMAX_KEY.")
+        base_url = os.getenv("MINIMAX_BASE_URL", "https://api.minimaxi.com/v1")
+        return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
     elif model_provider == ModelProvider.GIGACHAT:
         if os.getenv("GIGACHAT_USER") or os.getenv("GIGACHAT_PASSWORD"):
             return GigaChat(model=model_name)
