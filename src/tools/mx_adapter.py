@@ -2,38 +2,58 @@
 MX Adapter — A-share data layer via 妙想 (MX) API.
 
 Provides the same function signatures as src/tools/api.py so agents can fetch
-A-share (沪深) data without any caller-side changes — just set
-`USE_MX=true` or a ticker's market is detected as A-share.
+A-share (沪深) data without any caller-side changes — auto-detects A-share
+tickers by .SH/.SZ/.BJ suffix and routes to MX.
 
 Environment:
     MX_APIKEY          — MX API key (also loaded from .env)
-    MX_OUTPUT_DIR      — MX script output dir (default: /tmp/mx_output)
+    MX_SKILL_PARENT    — parent of mx-data/ skill dir (default: ~/.openclaw/workspace-trading/skills)
 """
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import re
-import sys
 import json
 import logging
 from datetime import datetime
 from typing import Optional
 
-# Ensure the MX skill's mx_data.py is importable
-_MX_SKILL_PATH = os.path.expanduser(
-    os.getenv("MX_SKILL_PATH", "~/.openclaw/workspace-trading/skills/mx-data")
-)
-if _MX_SKILL_PATH not in sys.path:
-    sys.path.insert(0, _MX_SKILL_PATH)
 
-try:
-    from mx_data import MXData
-except ImportError as e:
-    raise ImportError(
-        f"mx_data module not found at {MX_SKILL_PATH}. "
-        "Set MX_SKILL_PATH env var or ensure mx-data skill is installed."
-    ) from e
+def _load_mx_data_module():
+    """Load mx_data module via file-based import (avoids hyphen directory issue)."""
+    # Use skills/ folder inside the codebase (decoupled from OpenClaw)
+    _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    skill_parent = os.path.join(_REPO_ROOT, "skills")
+    module_path = os.path.join(skill_parent, "mx-data", "mx_data.py")
+    spec = importlib.util.spec_from_file_location("mx_data", module_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+_mx_data_mod = None
+
+
+def _get_mx_data():
+    global _mx_data_mod
+    if _mx_data_mod is None:
+        _mx_data_mod = _load_mx_data_module()
+    return _mx_data_mod
+
+
+class MXDataWrapper:
+    """Thin wrapper to expose MXData.query and MXData.parse_result without importing the class directly."""
+    @staticmethod
+    def query(query: str) -> dict:
+        mod = _get_mx_data()
+        return mod.MXData().query(query)
+
+    @staticmethod
+    def parse_result(result: dict):
+        mod = _get_mx_data()
+        return mod.MXData.parse_result(result)
 
 from src.data.models import (
     Price,
@@ -50,11 +70,12 @@ logger = logging.getLogger(__name__)
 # Helpers
 # ─────────────────────────────────────────────────────────────────
 
-def _get_mx_client() -> MXData:
+def _get_mx_client():
     api_key = os.getenv("MX_APIKEY")
     if not api_key:
         raise ValueError("MX_APIKEY environment variable not set.")
-    return MXData(api_key=api_key)
+    mod = _get_mx_data()
+    return mod.MXData(api_key=api_key)
 
 
 def _is_ashare(ticker: str) -> bool:
@@ -184,9 +205,8 @@ def _mx_query(query: str) -> dict:
 
 def _mx_query_tables(query: str) -> tuple[list, list[str], int, Optional[str]]:
     """Execute MX query and return parsed tables (same signature as MXData.parse_result)."""
-    client = _get_mx_client()
-    result = client.query(query)
-    return MXData.parse_result(result)
+    result = MXDataWrapper.query(query)
+    return MXDataWrapper.parse_result(result)
 
 
 # ─────────────────────────────────────────────────────────────────

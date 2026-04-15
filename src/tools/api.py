@@ -1,6 +1,7 @@
 import datetime
 import logging
 import os
+import re
 import pandas as pd
 import requests
 import time
@@ -24,6 +25,23 @@ from src.data.models import (
 
 # Global cache instance
 _cache = get_cache()
+
+# Lazy importer to avoid circular dependency
+_mx_adapter = None
+
+
+def _is_ashare(ticker: str) -> bool:
+    """Detect A-share ticker (沪深京)."""
+    t = ticker.upper()
+    return bool(re.search(r"\.(SH|SZ|BJ)$", t))
+
+
+def _get_mx_adapter():
+    global _mx_adapter
+    if _mx_adapter is None:
+        from src.tools import mx_adapter
+        _mx_adapter = mx_adapter
+    return _mx_adapter
 
 
 def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: dict = None, max_retries: int = 3) -> requests.Response:
@@ -61,7 +79,11 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
 
 
 def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None) -> list[Price]:
-    """Fetch price data from cache or API."""
+    """Fetch price data from MX (A-shares) or Financial Datasets API."""
+    if _is_ashare(ticker):
+        mx = _get_mx_adapter()
+        return mx.get_prices(ticker, start_date, end_date, api_key=api_key)
+
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date}_{end_date}"
     
@@ -103,7 +125,11 @@ def get_financial_metrics(
     limit: int = 10,
     api_key: str = None,
 ) -> list[FinancialMetrics]:
-    """Fetch financial metrics from cache or API."""
+    """Fetch financial metrics from MX (A-shares) or Financial Datasets API."""
+    if _is_ashare(ticker):
+        mx = _get_mx_adapter()
+        return mx.get_financial_metrics(ticker, end_date, period=period, limit=limit, api_key=api_key)
+
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{period}_{end_date}_{limit}"
     
@@ -146,7 +172,11 @@ def search_line_items(
     limit: int = 10,
     api_key: str = None,
 ) -> list[LineItem]:
-    """Fetch line items from API."""
+    """Fetch line items from MX (A-shares) or Financial Datasets API."""
+    if _is_ashare(ticker):
+        mx = _get_mx_adapter()
+        return mx.search_line_items(ticker, line_items, end_date, period=period, limit=limit, api_key=api_key)
+
     # If not in cache or insufficient data, fetch from API
     headers = {}
     financial_api_key = api_key or os.environ.get("FINANCIAL_DATASETS_API_KEY")
@@ -317,7 +347,11 @@ def get_market_cap(
     end_date: str,
     api_key: str = None,
 ) -> float | None:
-    """Fetch market cap from the API."""
+    """Fetch market cap from MX (A-shares) or Financial Datasets API."""
+    if _is_ashare(ticker):
+        mx = _get_mx_adapter()
+        return mx.get_market_cap(ticker, end_date, api_key=api_key)
+
     # Check if end_date is today
     if end_date == datetime.datetime.now().strftime("%Y-%m-%d"):
         # Get the market cap from company facts API
