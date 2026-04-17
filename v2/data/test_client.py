@@ -1,5 +1,7 @@
 """Week 1 data exploration — pull and inspect FD data for 5 tickers."""
 
+import os
+
 import pytest
 
 from v2.data import FDClient
@@ -11,6 +13,8 @@ PRICE_END = "2026-04-15"
 
 @pytest.fixture(scope="module")
 def fd():
+    if not os.environ.get("FINANCIAL_DATASETS_API_KEY"):
+        pytest.skip("FINANCIAL_DATASETS_API_KEY is required for live Financial Datasets tests")
     with FDClient() as client:
         yield client
 
