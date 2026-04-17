@@ -17,12 +17,14 @@ This system employs several agents working together:
 11. Rakesh Jhunjhunwala Agent - The Big Bull of India
 12. Stanley Druckenmiller Agent - Macro legend who hunts for asymmetric opportunities with growth potential
 13. Warren Buffett Agent - The oracle of Omaha, seeks wonderful companies at a fair price
-14. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
-15. Sentiment Agent - Analyzes market sentiment and generates trading signals
-16. Fundamentals Agent - Analyzes fundamental data and generates trading signals
-17. Technicals Agent - Analyzes technical indicators and generates trading signals
-18. Risk Manager - Calculates risk metrics and sets position limits
-19. Portfolio Manager - Makes final trading decisions and generates orders
+14. Duan Yongping Agent - Entrepreneur-operator value investor who emphasizes 本分, owner earnings, and zero leverage
+15. Liang Wenfeng Agent - China AI founder-quant who blends innovation moats, capital efficiency, and market regime discipline
+16. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
+17. Sentiment Agent - Analyzes market sentiment and generates trading signals
+18. Fundamentals Agent - Analyzes fundamental data and generates trading signals
+19. Technicals Agent - Analyzes technical indicators and generates trading signals
+20. Risk Manager - Calculates risk metrics and sets position limits
+21. Portfolio Manager - Makes final trading decisions and generates orders
 
 <img width="1042" alt="Screenshot 2025-03-22 at 6 19 07 PM" src="https://github.com/user-attachments/assets/cbae3dcf-b571-490d-b0ad-3f0f035ac0d4" />
 
