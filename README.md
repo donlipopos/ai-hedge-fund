@@ -19,12 +19,14 @@ This system employs several agents working together:
 13. Warren Buffett Agent - The oracle of Omaha, seeks wonderful companies at a fair price
 14. Duan Yongping Agent - Entrepreneur-operator value investor who emphasizes 本分, owner earnings, and zero leverage
 15. Liang Wenfeng Agent - China AI founder-quant who blends innovation moats, capital efficiency, and market regime discipline
-16. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
-17. Sentiment Agent - Analyzes market sentiment and generates trading signals
-18. Fundamentals Agent - Analyzes fundamental data and generates trading signals
-19. Technicals Agent - Analyzes technical indicators and generates trading signals
-20. Risk Manager - Calculates risk metrics and sets position limits
-21. Portfolio Manager - Makes final trading decisions and generates orders
+16. Technicals Agent - Analyzes technical indicators and generates trading signals
+17. Fundamentals Agent - Analyzes fundamental data and generates trading signals
+18. Growth Agent - Analyzes growth trends and generates trading signals
+19. News Sentiment Agent - Analyzes news sentiment and generates trading signals
+20. Sentiment Agent - Analyzes market sentiment and generates trading signals
+21. Valuation Agent - Calculates the intrinsic value of a stock and generates trading signals
+22. Risk Manager - Calculates risk metrics and sets position limits
+23. Portfolio Manager - Makes final trading decisions and generates orders
 
 <img width="1042" alt="Screenshot 2025-03-22 at 6 19 07 PM" src="https://github.com/user-attachments/assets/cbae3dcf-b571-490d-b0ad-3f0f035ac0d4" />
 
