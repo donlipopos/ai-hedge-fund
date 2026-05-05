@@ -255,20 +255,21 @@ def warm_market_cap_cache(tickers: list[str], end_date: str) -> None:
         code_to_ticker = {c: t for c, t in zip(needed_codes, needed_tickers)}
         
         for table in tables:
-            for row in table:
+            rows = table.get("rows", [])
+            for row in rows:
                 for col_name, cell_value in row.items():
-                    if col_name == "date" or not cell_value: continue
-                    
+                    if col_name == "date" or not cell_value:
+                        continue
+
                     code = _extract_code_from_string(col_name)
                     if code and code in code_to_ticker:
                         cap_val = _parse_chinese_number(str(cell_value))
-                        if cap_val > 0: # Ensure we got a valid parse
+                        if cap_val > 0:  # Ensure we got a valid parse
                             ticker = code_to_ticker[code]
                             cache_key = f"{ticker}_{end_date}"
                             # Only overwrite if it's currently None
                             if cache._market_cap_cache.get(cache_key) is None:
                                 cache._market_cap_cache[cache_key] = cap_val
-
 
 def warm_financial_metrics_cache(tickers: list[str], end_date: str, period: str = "ttm", limit: int = 10) -> None:
     """Pre-fetch and cache financial metrics for multiple A-share tickers."""
