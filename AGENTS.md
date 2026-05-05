@@ -1,25 +1,81 @@
-# Repository Guidelines
+# AI Hedge Fund - Project Context
 
-## Project Structure & Module Organization
+## Project Overview
+An AI-powered hedge fund proof-of-concept that leverages a multi-agent architecture to simulate trading decisions. The system uses **LangGraph** to coordinate specialized agents (inspired by famous investors like Buffett, Graham, and Lynch) alongside technical, fundamental, and sentiment analysts.
 
-Core Python trading logic lives in `src/`, with agents in `src/agents/`, CLI entrypoints in `src/main.py` and `src/backtester.py`, shared utilities in `src/utils/`, and backtesting code in `src/backtesting/`. Experimental next-generation work is isolated in `v2/`. The web app lives under `app/`: `app/backend/` contains the FastAPI server, database models, Alembic migrations, and service layer; `app/frontend/` contains the Vite/React UI. Tests live in `tests/`, with backtesting coverage under `tests/backtesting/` and reusable API fixtures under `tests/fixtures/`.
+### Core Technology Stack
+- **Languages:** Python (3.11+), TypeScript (React/Vite)
+- **AI Orchestration:** LangGraph, LangChain
+- **LLM Support:** Multi-provider (OpenAI, Anthropic, DeepSeek, Google Gemini, Groq, Kimi, MiniMax, Ollama, etc.)
+- **API Framework:** FastAPI (Backend)
+- **Data Sourcing:** `financial-datasets.com`, `Miaoxiang (MX)` API for Chinese A-shares
+- **Development Tools:** Poetry, Docker, Pytest
 
-## Build, Test, and Development Commands
+### Architecture Highlights
+- **Graph-Based Workflow:** Defined in `src/graph/state.py` and implemented in `src/main.py`. The graph parallelizes analysts, aggregates signals via a Risk Manager, and executes via a Portfolio Manager.
+- **Agent Layer:** Located in `src/agents/`. Each agent is a functional node in the graph that uses LLMs and specialized tools to produce trading signals.
+- **Data Layer:** Centralized in `src/tools/api.py` and `src/data/`. Features a caching system (`src/data/cache.py`) and an experimental v2 client layer (`v2/data/`).
+- **Web App:** Full-stack implementation in `app/` with a React frontend and FastAPI backend.
 
-Install Python dependencies from the repository root with `poetry install`. Run the CLI hedge fund with `poetry run python src/main.py --ticker AAPL,MSFT,NVDA`. Run the backtester with `poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA` or `poetry run backtester`. Start the API locally from `app/backend/` with `poetry run uvicorn main:app --reload`. Start the frontend from `app/frontend/` with `npm install` and `npm run dev`. Production frontend builds use `npm run build`; lint with `npm run lint`.
+---
 
-## Coding Style & Naming Conventions
+## Building and Running
 
-Python targets 3.11 and uses `black`, `isort`, and `flake8`; format before opening a PR with `poetry run black . && poetry run isort . && poetry run flake8`. Use 4-space indentation, `snake_case` for modules/functions, and `PascalCase` for classes. Frontend code is TypeScript + React with ESLint; existing files use 2-space indentation, `PascalCase` component names, and `kebab-case` filenames only for utility-style assets when already established.
+### Prerequisites
+- Install **Poetry** for dependency management.
+- Copy `.env.example` to `.env` and configure your API keys.
 
-## Testing Guidelines
+### CLI Commands
+- **Install Dependencies:** `poetry install`
+- **Run Hedge Fund:** `poetry run python src/main.py --ticker AAPL,MSFT,NVDA`
+- **Run Backtester:** `poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA` or `poetry run backtester`
+- **A-Share Pipeline:** `poetry run python -m src.cli.ashare_pipeline --criteria "ROE>10%" --model MiniMax-M2.7`
 
-Use `pytest` from the repo root: `poetry run pytest`. Narrow scope during development, for example `poetry run pytest tests/backtesting -q` or `poetry run pytest tests/test_cache.py`. Name test files `test_*.py`, group related assertions in `Test...` classes when helpful, and keep deterministic fixtures in `tests/fixtures/` so API-dependent logic remains reproducible.
+### Web Application
+- **Backend:** `cd app/backend && poetry run uvicorn main:app --reload`
+- **Frontend:** `cd app/frontend && npm install && npm run dev`
 
-## Commit & Pull Request Guidelines
+### Testing
+- **Run All Tests:** `poetry run pytest`
+- **Specific Scopes:** `poetry run pytest tests/backtesting`
 
-Recent history favors short, imperative Conventional Commit subjects such as `feat(data): add MX A-share data layer` and `feat(llm): add MiniMax M2.7 as LLM provider`. Follow that pattern when possible. Keep PRs focused, explain behavior changes, list validation steps, and attach screenshots for UI work. Link the relevant issue when one exists.
+---
 
-## Configuration & Agent Notes
+## Development Conventions
 
-Copy `.env.example` to `.env` and supply required API keys before running the CLI or app. Do not commit secrets. When updating library, framework, SDK, API, CLI, or cloud-service usage, fetch current docs through Context7 before coding or revising examples.
+### Python Style
+- **Indentation:** 4 spaces.
+- **Formatters:** `black` (line-length 420), `isort`.
+- **Naming:** `snake_case` for files and functions, `PascalCase` for classes.
+- **Linting:** Use `flake8`.
+
+### Frontend Style
+- **Language:** TypeScript.
+- **Indentation:** 2 spaces.
+- **Naming:** `PascalCase` for components.
+
+### Git & Pull Requests
+- **Commit Messages:** Follow **Conventional Commits** (e.g., `feat(agent): ...`, `fix(llm): ...`).
+- **PRs:** Keep changes focused and include validation evidence.
+
+### Tooling Mandate
+- **Context7:** Always use the `context7-mcp` skill to fetch current documentation for any library, framework, or cloud service before implementation.
+
+---
+
+## Key Directories
+- `src/agents/`: Individual investor and analyst agent implementations.
+- `src/tools/`: API adapters and data retrieval logic.
+- `src/backtesting/`: Core engine for historical strategy simulation.
+- `app/`: Web interface (FastAPI + React).
+- `v2/`: Experimental next-generation data and feature engineering layer.
+- `skills/`: Custom agent skills (e.g., MX data retrieval).
+- `tests/`: Comprehensive test suites.
+
+---
+
+## Git Guidelines 
+- Create feature branch for new features, refinements and enhancement before any code change. 
+- Create hotfix branch for bugfix and hotfix before any code change. 
+- Since this repository is a fork, the purpose of the main branch is to keep sync with the orignal main, never merge back to main. 
+- Use the local branch for customized changes.
