@@ -222,6 +222,55 @@ def _mx_query_tables(query: str) -> tuple[list, list[str], int, Optional[str]]:
 
 
 # ─────────────────────────────────────────────────────────────────
+# Cache Warming Functions
+# ─────────────────────────────────────────────────────────────────
+
+def warm_market_cap_cache(tickers: list[str], end_date: str) -> None:
+    """Pre-fetch and cache market cap for multiple A-share tickers."""
+    cache = get_cache()
+    if not hasattr(cache, '_market_cap_cache'):
+        cache._market_cap_cache = {}
+        
+    ashare_tickers = [t for t in tickers if _is_ashare(t)]
+    chunks = _chunk_tickers(ashare_tickers, chunk_size=5)
+    
+    for chunk in chunks:
+        needed_tickers = []
+        needed_codes = []
+        for t in chunk:
+            cache_key = f"{t}_{end_date}"
+            if cache._market_cap_cache.get(cache_key) is None:
+                needed_tickers.append(t)
+                needed_codes.append(_ticker_to_code(t))
+                
+        if not needed_codes:
+            continue
+            
+        query = f"{'和'.join(needed_codes)}最新总市值流通市值"
+        tables, _, _, err = _mx_query_tables(query)
+        if err or not tables:
+            continue
+            
+        # Map codes back to full tickers (e.g. 600519 -> 600519.SH)
+        code_to_ticker = {c: t for c, t in zip(needed_codes, needed_tickers)}
+        
+        for table in tables:
+            for row in table:
+                for col_name, cell_value in row.items():
+                    if col_name == "date" or not cell_value: continue
+                    
+                    code = _extract_code_from_string(col_name)
+                    if code and code in code_to_ticker:
+                        cap_val = _parse_chinese_number(str(cell_value))
+                        if cap_val > 0: # Ensure we got a valid parse
+                            ticker = code_to_ticker[code]
+                            cache_key = f"{ticker}_{end_date}"
+                            # Only overwrite if it's currently None
+                            if cache._market_cap_cache.get(cache_key) is None:
+                                cache._market_cap_cache[cache_key] = cap_val
+
+
+# ─────────────────────────────────────────────────────────────────
 # Data Fetch Functions  (mirrors src/tools/api.py signatures)
 # ─────────────────────────────────────────────────────────────────
 
