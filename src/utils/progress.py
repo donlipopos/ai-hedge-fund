@@ -31,7 +31,7 @@ class AgentProgress:
 
     def start(self):
         """Start the progress display."""
-        if not self.started:
+        if not self.started and not os.environ.get("PROGRESS_SILENT"):
             self.live.start()
             self.started = True
 
@@ -61,7 +61,8 @@ class AgentProgress:
         for handler in self.update_handlers:
             handler(agent_name, ticker, status, analysis, timestamp)
 
-        self._refresh_display()
+        if not os.environ.get("PROGRESS_SILENT"):
+            self._refresh_display()
 
     def get_all_status(self):
         """Get the current status of all agents as a dictionary."""

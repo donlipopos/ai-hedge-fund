@@ -130,13 +130,15 @@ def create_workflow(selected_analysts=None):
     return workflow
 
 
-if __name__ == "__main__":
+def main(parser=None, args=None):
     inputs = parse_cli_inputs(
         description="Run the hedge fund trading system",
         require_tickers=True,
         default_months_back=None,
         include_graph_flag=True,
         include_reasoning_flag=True,
+        parser=parser,
+        args=args,
     )
 
     tickers = inputs.tickers
@@ -177,3 +179,7 @@ if __name__ == "__main__":
         model_provider=inputs.model_provider,
     )
     print_trading_output(result)
+
+
+if __name__ == "__main__":
+    main()

@@ -231,36 +231,38 @@ def parse_cli_inputs(
     default_months_back: int | None,
     include_graph_flag: bool = False,
     include_reasoning_flag: bool = False,
+    parser: Optional[argparse.ArgumentParser] = None,
+    args: Optional[argparse.Namespace] = None,
 ) -> CLIInputs:
-    parser = argparse.ArgumentParser(description=description)
+    if parser is None:
+        parser = argparse.ArgumentParser(description=description)
+        add_common_args(parser, require_tickers=require_tickers, include_analyst_flags=True, include_ollama=True)
+        add_date_args(parser, default_months_back=default_months_back)
 
-    # Common/interactive flags
-    add_common_args(parser, require_tickers=require_tickers, include_analyst_flags=True, include_ollama=True)
-    add_date_args(parser, default_months_back=default_months_back)
+        # Funding flags (standardized, with alias)
+        parser.add_argument(
+            "--initial-cash",
+            "--initial-capital",
+            dest="initial_cash",
+            type=float,
+            default=100000.0,
+            help="Initial cash position (alias: --initial-capital). Defaults to 100000.0",
+        )
+        parser.add_argument(
+            "--margin-requirement",
+            dest="margin_requirement",
+            type=float,
+            default=0.0,
+            help="Initial margin requirement ratio for shorts (e.g., 0.5 for 50%%). Defaults to 0.0",
+        )
 
-    # Funding flags (standardized, with alias)
-    parser.add_argument(
-        "--initial-cash",
-        "--initial-capital",
-        dest="initial_cash",
-        type=float,
-        default=100000.0,
-        help="Initial cash position (alias: --initial-capital). Defaults to 100000.0",
-    )
-    parser.add_argument(
-        "--margin-requirement",
-        dest="margin_requirement",
-        type=float,
-        default=0.0,
-        help="Initial margin requirement ratio for shorts (e.g., 0.5 for 50%%). Defaults to 0.0",
-    )
+        if include_reasoning_flag:
+            parser.add_argument("--show-reasoning", action="store_true", help="Show reasoning from each agent")
+        if include_graph_flag:
+            parser.add_argument("--show-agent-graph", action="store_true", help="Show the agent graph")
 
-    if include_reasoning_flag:
-        parser.add_argument("--show-reasoning", action="store_true", help="Show reasoning from each agent")
-    if include_graph_flag:
-        parser.add_argument("--show-agent-graph", action="store_true", help="Show the agent graph")
-
-    args = parser.parse_args()
+    if args is None:
+        args = parser.parse_args()
 
     # Normalize parsed values
     tickers = parse_tickers(getattr(args, "tickers", None))

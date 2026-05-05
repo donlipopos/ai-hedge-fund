@@ -27,9 +27,9 @@ An AI-powered hedge fund proof-of-concept that leverages a multi-agent architect
 
 ### CLI Commands
 - **Install Dependencies:** `poetry install`
-- **Run Hedge Fund:** `poetry run python src/main.py --ticker AAPL,MSFT,NVDA`
-- **Run Backtester:** `poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA` or `poetry run backtester`
-- **A-Share Pipeline:** `poetry run python -m src.cli.ashare_pipeline --criteria "ROE>10%" --model MiniMax-M2.7`
+- **Run Hedge Fund:** `poetry run fund run --ticker AAPL,MSFT,NVDA`
+- **Run Backtester:** `poetry run fund backtest --tickers AAPL,MSFT,NVDA`
+- **A-Share Pipeline:** `poetry run fund ashare --criteria "ROE>10%"`
 
 ### Web Application
 - **Backend:** `cd app/backend && poetry run uvicorn main:app --reload`

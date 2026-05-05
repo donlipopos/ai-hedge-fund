@@ -15,28 +15,31 @@ from src.main import run_hedge_fund
 from src.utils.ollama import ensure_ollama_and_model
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Run backtesting engine (modular)")
-    parser.add_argument("--tickers", type=str, required=False, help="Comma-separated tickers")
-    parser.add_argument(
-        "--end-date",
-        type=str,
-        default=datetime.now().strftime("%Y-%m-%d"),
-        help="End date YYYY-MM-DD",
-    )
-    parser.add_argument(
-        "--start-date",
-        type=str,
-        default=(datetime.now() - relativedelta(months=1)).strftime("%Y-%m-%d"),
-        help="Start date YYYY-MM-DD",
-    )
-    parser.add_argument("--initial-capital", type=float, default=100000)
-    parser.add_argument("--margin-requirement", type=float, default=0.0)
-    parser.add_argument("--analysts", type=str, required=False)
-    parser.add_argument("--analysts-all", action="store_true")
-    parser.add_argument("--ollama", action="store_true")
+def main(parser: argparse.ArgumentParser | None = None, args: argparse.Namespace | None = None) -> int:
+    if parser is None:
+        parser = argparse.ArgumentParser(description="Run backtesting engine (modular)")
+        parser.add_argument("--tickers", type=str, required=False, help="Comma-separated tickers")
+        parser.add_argument(
+            "--end-date",
+            type=str,
+            default=datetime.now().strftime("%Y-%m-%d"),
+            help="End date YYYY-MM-DD",
+        )
+        parser.add_argument(
+            "--start-date",
+            type=str,
+            default=(datetime.now() - relativedelta(months=1)).strftime("%Y-%m-%d"),
+            help="Start date YYYY-MM-DD",
+        )
+        parser.add_argument("--initial-capital", type=float, default=100000)
+        parser.add_argument("--margin-requirement", type=float, default=0.0)
+        parser.add_argument("--analysts", type=str, required=False)
+        parser.add_argument("--analysts-all", action="store_true")
+        parser.add_argument("--ollama", action="store_true")
 
-    args = parser.parse_args()
+    if args is None:
+        args = parser.parse_args()
+
     init(autoreset=True)
 
     tickers = [t.strip() for t in args.tickers.split(",")] if args.tickers else []

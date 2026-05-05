@@ -243,46 +243,48 @@ def print_summary(pipeline_result: dict):
     print(SEP + "\n")
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="A-Share AI Hedge Fund Pipeline (MiniMax + 妙想 MX)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        "--criteria", type=str, required=True,
-        help="Natural-language screening criteria for mx-xuangu "
-             "(e.g. 'ROE大于10%流通市值大于100亿的A股')",
-    )
-    parser.add_argument(
-        "--max-candidates", type=int, default=10,
-        help="Maximum candidates to analyze (default: 10)",
-    )
-    add_date_args(parser, default_months_back=1)
-    parser.add_argument(
-        "--initial-cash", type=float, default=1_000_000.0,
-        help="Initial portfolio cash in CNY (default: 1,000,000)",
-    )
-    parser.add_argument(
-        "--analysts", type=str, default="warren_buffett,valuation_analyst",
-        help="Comma-separated analyst keys (default: warren_buffett,valuation_analyst)",
-    )
-    parser.add_argument(
-        "--model", type=str, default="MiniMax-M2.7",
-        help="LLM model (default: MiniMax-M2.7)",
-    )
-    parser.add_argument(
-        "--model-provider", type=str, default="MiniMax",
-        help="LLM provider (default: MiniMax)",
-    )
-    parser.add_argument("--show-reasoning", action="store_true",
-                        help="Print agent reasoning trace")
-    parser.add_argument(
-        "--output-json", type=str,
-        help="Write summary JSON to this path",
-    )
-    add_common_args(parser, require_tickers=False, include_analyst_flags=False, include_ollama=False)
+def main(parser: argparse.ArgumentParser | None = None, args: argparse.Namespace | None = None):
+    if parser is None:
+        parser = argparse.ArgumentParser(
+            description="A-Share AI Hedge Fund Pipeline (MiniMax + 妙想 MX)",
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+        )
+        parser.add_argument(
+            "--criteria", type=str, required=True,
+            help="Natural-language screening criteria for mx-xuangu "
+                 "(e.g. 'ROE大于10%流通市值大于100亿的A股')",
+        )
+        parser.add_argument(
+            "--max-candidates", type=int, default=10,
+            help="Maximum candidates to analyze (default: 10)",
+        )
+        add_date_args(parser, default_months_back=1)
+        parser.add_argument(
+            "--initial-cash", type=float, default=1_000_000.0,
+            help="Initial portfolio cash in CNY (default: 1,000,000)",
+        )
+        parser.add_argument(
+            "--analysts", type=str, default="warren_buffett,valuation_analyst",
+            help="Comma-separated analyst keys (default: warren_buffett,valuation_analyst)",
+        )
+        parser.add_argument(
+            "--model", type=str, default="MiniMax-M2.7",
+            help="LLM model (default: MiniMax-M2.7)",
+        )
+        parser.add_argument(
+            "--model-provider", type=str, default="MiniMax",
+            help="LLM provider (default: MiniMax)",
+        )
+        parser.add_argument("--show-reasoning", action="store_true",
+                            help="Print agent reasoning trace")
+        parser.add_argument(
+            "--output-json", type=str,
+            help="Write summary JSON to this path",
+        )
+        add_common_args(parser, require_tickers=False, include_analyst_flags=False, include_ollama=False)
 
-    args = parser.parse_args()
+    if args is None:
+        args = parser.parse_args()
     selected_analysts = [a.strip() for a in args.analysts.split(",") if a.strip()]
 
     warnings.filterwarnings("ignore")

@@ -21,6 +21,10 @@ def print_trading_output(result: dict) -> None:
     Args:
         result (dict): Dictionary containing decisions and analyst signals for multiple tickers
     """
+    if os.environ.get("OUTPUT_JSON"):
+        print(json.dumps(result, indent=2, default=str))
+        return
+
     decisions = result.get("decisions")
     if not decisions:
         print(f"{Fore.RED}No trading decisions available{Style.RESET_ALL}")

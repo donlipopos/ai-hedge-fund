@@ -59,4 +59,5 @@ profile = "black"
 force_alphabetical_sort_within_sections = true
 
 [tool.poetry.scripts]
+fund = "src.cli.entrypoint:main"
 backtester = "src.backtesting.cli:main"

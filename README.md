@@ -101,7 +101,7 @@ MX_APIKEY=your-mx-apikey
 
 ### ⌨️ Command Line Interface
 
-You can run the AI Hedge Fund directly via terminal. This approach offers more granular control and is useful for automation, scripting, and integration purposes.
+You can run the AI Hedge Fund via the unified `fund` CLI. This approach offers granular control and is optimized for both human users and AI agents (via the `--json` flag).
 
 <img width="992" alt="Screenshot 2025-01-06 at 5 50 17 PM" src="https://github.com/user-attachments/assets/e8ca04bf-9989-4a7d-a8b4-34e04666663b" />
 
@@ -117,51 +117,54 @@ curl -sSL https://install.python-poetry.org | python3 -
 poetry install
 ```
 
-#### Run the AI Hedge Fund
+#### Run the AI Hedge Fund (Standard Analysis)
 ```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA
+poetry run fund run --ticker AAPL,MSFT,NVDA
 ```
 
-You can also specify a `--ollama` flag to run the AI hedge fund using local LLMs.
-
+You can specify a `--ollama` flag to run using local LLMs.
 ```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA --ollama
+poetry run fund run --ticker AAPL,MSFT,NVDA --ollama
 ```
 
-You can optionally specify the start and end dates to make decisions over a specific time period.
-
+Specify start and end dates for a specific time period:
 ```bash
-poetry run python src/main.py --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
+poetry run fund run --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
 ```
 
 #### Run the Backtester
 ```bash
-poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
+poetry run fund backtest --tickers AAPL,MSFT,NVDA
 ```
 
 **Example Output:**
 <img width="941" alt="Screenshot 2025-01-06 at 5 47 52 PM" src="https://github.com/user-attachments/assets/00e794ea-8628-44e6-9a84-8f8a31ad3b47" />
 
-
-Note: The `--ollama`, `--start-date`, and `--end-date` flags work for the backtester, as well!
+Note: The `--ollama`, `--start-date`, and `--end-date` flags work for the backtester as well!
 
 #### 🇨🇳 Chinese A-Share Pipeline (Experimental)
-You can also run the hedge fund analysis for Chinese A-shares using the MX API and MiniMax models.
+Run analysis for Chinese A-shares using the MX API and MiniMax models.
 
 ```bash
 # Set the path to the skills directory (required for MX data)
 export MX_SKILL_PARENT=$(pwd)/skills
 
-# Run the A-share pipeline with specific analysts
-poetry run python -m src.cli.ashare_pipeline \
+# Run the A-share pipeline
+poetry run fund ashare \
     --criteria "ROE大于10%且市值大于100亿的A股" \
     --max-candidates 10 \
     --end-date 2026-04-15 \
-    --analysts warren_buffett,valuation,technicals \
-    --model MiniMax-M2.7
+    --analysts warren_buffett,valuation,technicals
 ```
 
 **Analyst Selection**: Use the `--analysts` flag with comma-separated IDs (e.g., `warren_buffett`, `valuation`, `technicals`, `fundamentals`, `sentiment`, `charlie_munger`).
+
+#### 🤖 AI-Friendly Mode (JSON Output)
+For integration with other AI agents (like **OpenClaw** or **Hermes**), use the global `--json` flag to get machine-readable output and silence progress bars.
+
+```bash
+poetry run fund --json run --ticker AAPL > result.json
+```
 
 ### 🖥️ Web Application
 
