@@ -267,14 +267,6 @@ def main(parser: argparse.ArgumentParser | None = None, args: argparse.Namespace
             "--analysts", type=str, default="warren_buffett,valuation_analyst",
             help="Comma-separated analyst keys (default: warren_buffett,valuation_analyst)",
         )
-        parser.add_argument(
-            "--model", type=str, default="MiniMax-M2.7",
-            help="LLM model (default: MiniMax-M2.7)",
-        )
-        parser.add_argument(
-            "--model-provider", type=str, default="MiniMax",
-            help="LLM provider (default: MiniMax)",
-        )
         parser.add_argument("--show-reasoning", action="store_true",
                             help="Print agent reasoning trace")
         parser.add_argument(

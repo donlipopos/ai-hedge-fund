@@ -40,7 +40,8 @@ def add_common_args(
         )
     if include_ollama:
         parser.add_argument("--ollama", action="store_true", help="Use Ollama for local LLM inference")
-    # --model is already added by the caller (e.g. ashare_pipeline.py)
+    parser.add_argument("--model", type=str, help="Model name to use (e.g., gpt-4o)")
+    parser.add_argument("--model-provider", type=str, help="Model provider (e.g., OpenAI, Anthropic)")
     return parser
 
 
