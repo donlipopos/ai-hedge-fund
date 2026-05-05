@@ -124,6 +124,15 @@ def run_ashare_pipeline(
     more = " ..." if len(candidates) > 5 else ""
     print(f"✅ {len(candidates)} candidates: {preview}{more}")
 
+    from src.tools.mx_adapter import warm_market_cap_cache, warm_financial_metrics_cache
+    print(f"\n[System] Warming cache for {len(tickers)} tickers via batch queries to MX API...")
+    try:
+        warm_market_cap_cache(tickers, end_date)
+        warm_financial_metrics_cache(tickers, end_date, period="ttm", limit=10)
+        print("[System] Cache warming complete.")
+    except Exception as e:
+        print(f"[Warning] Cache warming failed: {e}. Falling back to single queries.")
+
     # ── Step 2: Build portfolio ──────────────────────────────────────
     portfolio = {
         "cash": initial_cash,
