@@ -122,14 +122,14 @@ poetry install
 poetry run fund run --ticker AAPL,MSFT,NVDA
 ```
 
-You can specify a `--ollama` flag to run using local LLMs.
+You can specify a `--ollama` flag to run using local LLMs, or use `--model` and `--model-provider` to select a specific remote model.
 ```bash
-poetry run fund run --ticker AAPL,MSFT,NVDA --ollama
+poetry run fund run --ticker AAPL,MSFT,NVDA --model gpt-4o
 ```
 
-Specify start and end dates for a specific time period:
+Specify which analysts to include via the `--analysts` flag:
 ```bash
-poetry run fund run --ticker AAPL,MSFT,NVDA --start-date 2024-01-01 --end-date 2024-03-01
+poetry run fund run --ticker AAPL --analysts warren_buffett,technicals
 ```
 
 #### Run the Backtester

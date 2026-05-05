@@ -31,6 +31,14 @@ An AI-powered hedge fund proof-of-concept that leverages a multi-agent architect
 - **Run Backtester:** `poetry run fund backtest --tickers AAPL,MSFT,NVDA`
 - **A-Share Pipeline:** `poetry run fund ashare --criteria "ROE>10%"`
 
+### Common CLI Parameters
+All subcommands (`run`, `backtest`, `ashare`) support the following parameters:
+- `--analysts`: Comma-separated analyst keys (e.g., `warren_buffett,technicals`).
+- `--model`: Specific LLM model name (e.g., `gpt-4o`, `claude-3-5-sonnet-latest`).
+- `--model-provider`: LLM provider (e.g., `OpenAI`, `Anthropic`, `Google`, `DeepSeek`).
+- `--ollama`: Flag to use local Ollama models (interactive selection if no model specified).
+- `--json`: (Global flag) Output raw JSON to `stdout` and silence progress bars/formatting.
+
 ### Web Application
 - **Backend:** `cd app/backend && poetry run uvicorn main:app --reload`
 - **Frontend:** `cd app/frontend && npm install && npm run dev`
