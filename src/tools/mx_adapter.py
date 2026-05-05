@@ -270,6 +270,133 @@ def warm_market_cap_cache(tickers: list[str], end_date: str) -> None:
                                 cache._market_cap_cache[cache_key] = cap_val
 
 
+def warm_financial_metrics_cache(tickers: list[str], end_date: str, period: str = "ttm", limit: int = 10) -> None:
+    """Pre-fetch and cache financial metrics for multiple A-share tickers."""
+    cache = get_cache()
+    ashare_tickers = [t for t in tickers if _is_ashare(t)]
+    chunks = _chunk_tickers(ashare_tickers, chunk_size=3) # Smaller chunks for dense metrics
+    
+    for chunk in chunks:
+        needed_tickers = []
+        needed_codes = []
+        for t in chunk:
+            cache_key = f"{t}_{period}_{end_date}_{limit}"
+            if not cache.get_financial_metrics(cache_key):
+                needed_tickers.append(t)
+                needed_codes.append(_ticker_to_code(t))
+                
+        if not needed_codes:
+            continue
+            
+        # We query just the most recent N periods
+        query = (
+            f"{'和'.join(needed_codes)}近{limit}年年度报告的"
+            f"净利润、归属于母公司股东的净利润、营业收入、营业总收入、"
+            f"资产总计、负债合计、归属于母公司股东权益合计、"
+            f"净利润/营业总收入(销售净利率)、销售毛利率、"
+            f"净资产收益率ROE、资产负债率、每股收益EPS(基本)"
+        )
+        tables, titles, _, err = _mx_query_tables(query)
+        if err or not tables:
+            continue
+            
+        code_to_ticker = {c: t for c, t in zip(needed_codes, needed_tickers)}
+        
+        # Group rows by ticker
+        ticker_metrics: dict[str, list[FinancialMetrics]] = {t: [] for t in needed_tickers}
+        
+        for i, table in enumerate(tables):
+            # Extract code from the title (sheet name)
+            title = table.get("sheet_name")
+            if not title:
+                title = titles[i] if i < len(titles) else ""
+            code = _extract_code_from_string(title)
+            
+            if code and code in code_to_ticker:
+                ticker = code_to_ticker[code]
+                
+                rows = table.get("rows", [])
+                fieldnames = table.get("fieldnames", [])
+                if not rows or "净利润" not in fieldnames:
+                    continue
+
+                seen_periods = set()
+                for row in rows:
+                    period_str = _clean_date(row.get("date", ""))
+                    if period_str in seen_periods:
+                        continue
+                    seen_periods.add(period_str)
+
+                    net_margin_raw = row.get("净利润/营业总收入(销售净利率)", "")
+                    gross_margin_raw = row.get("销售毛利率", "")
+                    roe_raw = row.get("净资产收益率ROE", "")
+                    debt_ratio_raw = row.get("资产负债率", "")
+                    eps_raw = row.get("每股收益EPS(基本)", "")
+
+                    total_assets = _parse_chinese_number(row.get("资产总计", "0"))
+                    total_debt   = _parse_chinese_number(row.get("负债合计", "0"))
+                    equity       = total_assets - total_debt
+                    revenue      = _parse_chinese_number(row.get("营业收入", "0"))
+                    net_income   = _parse_chinese_number(row.get("净利润", "0"))
+
+                    ticker_metrics[ticker].append(
+                        FinancialMetrics(
+                            ticker=ticker,
+                            report_period=period_str,
+                            period=period,
+                            currency="CNY",
+                            market_cap=None,
+                            enterprise_value=None,
+                            price_to_earnings_ratio=None,
+                            price_to_book_ratio=None,
+                            price_to_sales_ratio=None,
+                            enterprise_value_to_ebitda_ratio=None,
+                            enterprise_value_to_revenue_ratio=None,
+                            free_cash_flow_yield=None,
+                            peg_ratio=None,
+                            gross_margin=_parse_chinese_number(gross_margin_raw),
+                            operating_margin=None,
+                            net_margin=_parse_chinese_number(net_margin_raw),
+                            return_on_equity=_parse_chinese_number(roe_raw),
+                            return_on_assets=(net_income / total_assets) if total_assets else None,
+                            return_on_invested_capital=None,
+                            asset_turnover=None,
+                            inventory_turnover=None,
+                            receivables_turnover=None,
+                            days_sales_outstanding=None,
+                            operating_cycle=None,
+                            working_capital_turnover=None,
+                            current_ratio=None,
+                            quick_ratio=None,
+                            cash_ratio=None,
+                            operating_cash_flow_ratio=None,
+                            debt_to_equity=(total_debt / equity) if equity else None,
+                            debt_to_assets=_parse_chinese_number(debt_ratio_raw),
+                            interest_coverage=None,
+                            revenue_growth=None,
+                            earnings_growth=None,
+                            book_value_growth=None,
+                            earnings_per_share_growth=None,
+                            free_cash_flow_growth=None,
+                            operating_income_growth=None,
+                            ebitda_growth=None,
+                            payout_ratio=None,
+                            earnings_per_share=_parse_chinese_number(eps_raw),
+                            book_value_per_share=None,
+                            free_cash_flow_per_share=None,
+                        )
+                    )
+
+        # Sort and cache
+        for ticker, metrics in ticker_metrics.items():
+            if metrics:
+                # Sort descending by date
+                metrics.sort(key=lambda x: x.report_period, reverse=True)
+                result = metrics[:limit]
+                cache_key = f"{ticker}_{period}_{end_date}_{limit}"
+                cache.set_financial_metrics(cache_key, [m.model_dump() for m in result])
+
+
 # ─────────────────────────────────────────────────────────────────
 # Data Fetch Functions  (mirrors src/tools/api.py signatures)
 # ─────────────────────────────────────────────────────────────────
