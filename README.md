@@ -152,13 +152,16 @@ You can also run the hedge fund analysis for Chinese A-shares using the MX API a
 # Set the path to the skills directory (required for MX data)
 export MX_SKILL_PARENT=$(pwd)/skills
 
-# Run the A-share pipeline
+# Run the A-share pipeline with specific analysts
 poetry run python -m src.cli.ashare_pipeline \
     --criteria "ROE大于10%且市值大于100亿的A股" \
     --max-candidates 10 \
     --end-date 2026-04-15 \
+    --analysts warren_buffett,valuation,technicals \
     --model MiniMax-M2.7
 ```
+
+**Analyst Selection**: Use the `--analysts` flag with comma-separated IDs (e.g., `warren_buffett`, `valuation`, `technicals`, `fundamentals`, `sentiment`, `charlie_munger`).
 
 ### 🖥️ Web Application
 
