@@ -166,6 +166,12 @@ For integration with other AI agents (like **OpenClaw** or **Hermes**), use the 
 poetry run fund --json run --ticker AAPL > result.json
 ```
 
+**Tip for Agents**: If you are calling this project from another directory, use Poetry's `-C` (or `--directory`) parameter to point to the project root without changing your current working directory:
+```bash
+# From any location
+poetry -C /path/to/ai-hedge-fund run fund --json run --ticker AAPL
+```
+
 ### 🖥️ Web Application
 
 The new way to run the AI Hedge Fund is through our web application that provides a user-friendly interface. This is recommended for users who prefer visual interfaces over command line tools.
