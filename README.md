@@ -81,9 +81,21 @@ OPENAI_API_KEY=your-openai-api-key
 
 # For getting financial data to power the hedge fund
 FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
+
+# Optional: For other LLM providers
+ANTHROPIC_API_KEY=your-anthropic-api-key
+GROQ_API_KEY=your-groq-api-key
+DEEPSEEK_API_KEY=your-deepseek-api-key
+GOOGLE_API_KEY=your-google-api-key
+MINIMAX_API_KEY=your-minimax-api-key
+MOONSHOT_API_KEY=your-moonshot-api-key
+XAI_API_KEY=your-xai-api-key
+
+# Optional: For Chinese A-share data (MX API)
+MX_APIKEY=your-mx-apikey
 ```
 
-**Important**: You must set at least one LLM API key (e.g. `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, or `DEEPSEEK_API_KEY`) for the hedge fund to work. 
+**Important**: You must set at least one LLM API key (e.g. `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, `GOOGLE_API_KEY`, `MINIMAX_API_KEY`, `MOONSHOT_API_KEY`, or `XAI_API_KEY`) for the hedge fund to work. 
 
 ## How to Run
 
@@ -132,6 +144,21 @@ poetry run python src/backtester.py --ticker AAPL,MSFT,NVDA
 
 
 Note: The `--ollama`, `--start-date`, and `--end-date` flags work for the backtester, as well!
+
+#### 🇨🇳 Chinese A-Share Pipeline (Experimental)
+You can also run the hedge fund analysis for Chinese A-shares using the MX API and MiniMax models.
+
+```bash
+# Set the path to the skills directory (required for MX data)
+export MX_SKILL_PARENT=$(pwd)/skills
+
+# Run the A-share pipeline
+poetry run python -m src.cli.ashare_pipeline \
+    --criteria "ROE大于10%且市值大于100亿的A股" \
+    --max-candidates 10 \
+    --end-date 2026-04-15 \
+    --model MiniMax-M2.7
+```
 
 ### 🖥️ Web Application
 

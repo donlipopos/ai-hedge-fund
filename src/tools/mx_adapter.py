@@ -20,6 +20,8 @@ import logging
 from datetime import datetime
 from typing import Optional
 
+from src.data.cache import get_cache  # noqa: E402
+
 
 def _load_mx_data_module():
     """Load mx_data module via file-based import (avoids hyphen directory issue)."""
@@ -235,6 +237,12 @@ def get_prices(
     if not _is_ashare(ticker):
         return []  # Let the caller fall back to the original api.py
 
+    # Check local cache first (pre-warmed from JSON cache file)
+    cache = get_cache()
+    cache_key = f"{ticker}_{start_date}_{end_date}"
+    if cached := cache.get_prices(cache_key):
+        return [Price(**p) for p in cached]
+
     code = _ticker_to_code(ticker)
     query = (
         f"{code}近{start_date}至{end_date}每个交易日的开盘价收盘价最高价最低价成交量"
@@ -263,6 +271,8 @@ def get_prices(
                 )
             )
     prices.sort(key=lambda p: p.time)
+    if prices:
+        cache.set_prices(cache_key, [p.model_dump() for p in prices])
     return prices
 
 
@@ -279,6 +289,12 @@ def get_financial_metrics(
     """
     if not _is_ashare(ticker):
         return []
+
+    # Check local cache first (pre-warmed from JSON cache file)
+    cache = get_cache()
+    cache_key = f"{ticker}_{period}_{end_date}_{limit}"
+    if cached := cache.get_financial_metrics(cache_key):
+        return [FinancialMetrics(**m) for m in cached]
 
     code = _ticker_to_code(ticker)
     # MX query: ask for key metrics across multiple periods
@@ -371,7 +387,10 @@ def get_financial_metrics(
 
     # Sort by period descending (most recent first) and apply limit
     metrics.sort(key=lambda m: m.report_period, reverse=True)
-    return metrics[:limit]
+    result = metrics[:limit]
+    if result:
+        cache.set_financial_metrics(cache_key, [m.model_dump() for m in result])
+    return result
 
 
 def search_line_items(
@@ -462,6 +481,14 @@ def get_market_cap(
     if not _is_ashare(ticker):
         return None
 
+    # Check local cache first (pre-warmed from JSON cache file)
+    cache = get_cache()
+    cache_key = f"{ticker}_{end_date}"
+    # market_cap is stored as a simple float under a dedicated key
+    cached_cap = getattr(cache, '_market_cap_cache', {}).get(cache_key)
+    if cached_cap is not None:
+        return cached_cap
+
     code = _ticker_to_code(ticker)
     query = f"{code}最新总市值流通市值"
     tables, _, _, err = _mx_query_tables(query)
@@ -484,6 +511,10 @@ def get_market_cap(
                     break
         if cap:
             break
+    if cap is not None:
+        if not hasattr(cache, '_market_cap_cache'):
+            cache._market_cap_cache = {}
+        cache._market_cap_cache[cache_key] = cap
     return cap
 
 

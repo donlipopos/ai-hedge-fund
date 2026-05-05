@@ -197,8 +197,8 @@ def main():
         parser.print_help()
         sys.exit(1)
     
-    # Default output directory is fixed to /root/.openclaw/workspace/mx_data/output/
-    default_output = Path("/root/.openclaw/workspace/mx_data/output")
+    # Default output directory
+    default_output = Path.home() / ".hermes" / "mx_data" / "output"
     output_dir = Path(args.output_dir) if args.output_dir else default_output
     output_dir.mkdir(parents=True, exist_ok=True)
     
