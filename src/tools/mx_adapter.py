@@ -72,6 +72,16 @@ logger = logging.getLogger(__name__)
 # Helpers
 # ─────────────────────────────────────────────────────────────────
 
+def _chunk_tickers(tickers: list[str], chunk_size: int = 5) -> list[list[str]]:
+    return [tickers[i:i + chunk_size] for i in range(0, len(tickers), chunk_size)]
+
+
+def _extract_code_from_string(text: str) -> str | None:
+    """Extract a 6-digit stock code from an arbitrary string (e.g. column header or sheet name)."""
+    match = re.search(r"(\d{6})", text)
+    return match.group(1) if match else None
+
+
 def _get_mx_client():
     api_key = os.getenv("MX_APIKEY")
     if not api_key:
