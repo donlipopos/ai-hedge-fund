@@ -37,8 +37,12 @@ from src.cli.input import add_common_args, add_date_args
 
 def _import_skill_module(skill_name: str, module_name: str):
     """Import a skill's Python module by name using file-based import (avoids hyphen-issue)."""
+    # Default to local skills/ folder in the project root
+    _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    default_skill_parent = os.path.join(_REPO_ROOT, "skills")
+    
     skill_parent = os.path.expandvars(os.path.expanduser(
-        os.getenv("MX_SKILL_PARENT", os.path.expanduser("~/.openclaw/workspace-trading/skills"))
+        os.getenv("MX_SKILL_PARENT", default_skill_parent)
     ))
     module_path = os.path.join(skill_parent, skill_name, f"{module_name}.py")
     spec = importlib.util.spec_from_file_location(module_name, module_path)
@@ -279,6 +283,8 @@ def main(parser: argparse.ArgumentParser | None = None, args: argparse.Namespace
         args = parser.parse_args()
     selected_analysts = [a.strip() for a in args.analysts.split(",") if a.strip()]
 
+    import logging
+    logging.basicConfig(level=logging.INFO, format='%(message)s')
     warnings.filterwarnings("ignore")
 
     result = run_ashare_pipeline(

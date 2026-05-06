@@ -81,6 +81,7 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
 def get_prices(ticker: str, start_date: str, end_date: str, api_key: str = None) -> list[Price]:
     """Fetch price data from MX (A-shares) or Financial Datasets API."""
     if _is_ashare(ticker):
+        logger.debug(f"Routing {ticker} to MX adapter for prices")
         mx = _get_mx_adapter()
         return mx.get_prices(ticker, start_date, end_date, api_key=api_key)
 
@@ -127,6 +128,7 @@ def get_financial_metrics(
 ) -> list[FinancialMetrics]:
     """Fetch financial metrics from MX (A-shares) or Financial Datasets API."""
     if _is_ashare(ticker):
+        logger.debug(f"Routing {ticker} to MX adapter for financial metrics")
         mx = _get_mx_adapter()
         return mx.get_financial_metrics(ticker, end_date, period=period, limit=limit, api_key=api_key)
 
@@ -349,6 +351,7 @@ def get_market_cap(
 ) -> float | None:
     """Fetch market cap from MX (A-shares) or Financial Datasets API."""
     if _is_ashare(ticker):
+        logger.debug(f"Routing {ticker} to MX adapter for market cap")
         mx = _get_mx_adapter()
         return mx.get_market_cap(ticker, end_date, api_key=api_key)
 
@@ -362,13 +365,12 @@ def get_market_cap(
 
         url = f"https://api.financialdatasets.ai/company/facts/?ticker={ticker}"
         response = _make_api_request(url, headers)
-        if response.status_code != 200:
-            print(f"Error fetching company facts: {ticker} - {response.status_code}")
-            return None
-
-        data = response.json()
-        response_model = CompanyFactsResponse(**data)
-        return response_model.company_facts.market_cap
+        if response.status_code == 200:
+            data = response.json()
+            response_model = CompanyFactsResponse(**data)
+            return response_model.company_facts.market_cap
+        elif response.status_code != 404:
+            logger.warning(f"Error fetching company facts: {ticker} - {response.status_code}")
 
     financial_metrics = get_financial_metrics(ticker, end_date, api_key=api_key)
     if not financial_metrics:

@@ -131,6 +131,10 @@ def create_workflow(selected_analysts=None):
 
 
 def main(parser=None, args=None):
+    import logging
+    # Set logging level to INFO to see data routing and cache warming logs
+    logging.basicConfig(level=logging.INFO, format='%(message)s')
+
     inputs = parse_cli_inputs(
         description="Run the hedge fund trading system",
         require_tickers=True,

@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import os
 from rich.console import Console
 from rich.live import Live
 from rich.table import Table

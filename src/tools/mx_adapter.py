@@ -25,9 +25,13 @@ from src.data.cache import get_cache  # noqa: E402
 
 def _load_mx_data_module():
     """Load mx_data module via file-based import (avoids hyphen directory issue)."""
-    # Use skills/ folder inside the codebase (decoupled from OpenClaw)
+    # Default to skills/ folder inside the codebase
     _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    skill_parent = os.path.join(_REPO_ROOT, "skills")
+    default_skill_parent = os.path.join(_REPO_ROOT, "skills")
+    
+    skill_parent = os.path.expandvars(os.path.expanduser(
+        os.getenv("MX_SKILL_PARENT", default_skill_parent)
+    ))
     module_path = os.path.join(skill_parent, "mx-data", "mx_data.py")
     spec = importlib.util.spec_from_file_location("mx_data", module_path)
     mod = importlib.util.module_from_spec(spec)
@@ -217,6 +221,7 @@ def _mx_query(query: str) -> dict:
 
 def _mx_query_tables(query: str) -> tuple[list, list[str], int, Optional[str]]:
     """Execute MX query and return parsed tables (same signature as MXData.parse_result)."""
+    logger.info(f"Querying MX API: {query}")
     result = MXDataWrapper.query(query)
     return MXDataWrapper.parse_result(result)
 
@@ -227,6 +232,7 @@ def _mx_query_tables(query: str) -> tuple[list, list[str], int, Optional[str]]:
 
 def warm_market_cap_cache(tickers: list[str], end_date: str) -> None:
     """Pre-fetch and cache market cap for multiple A-share tickers."""
+    logger.info(f"Warming market cap cache for {len(tickers)} A-shares...")
     cache = get_cache()
     if not hasattr(cache, '_market_cap_cache'):
         cache._market_cap_cache = {}
@@ -273,6 +279,7 @@ def warm_market_cap_cache(tickers: list[str], end_date: str) -> None:
 
 def warm_financial_metrics_cache(tickers: list[str], end_date: str, period: str = "ttm", limit: int = 10) -> None:
     """Pre-fetch and cache financial metrics for multiple A-share tickers."""
+    logger.info(f"Warming financial metrics cache for {len(tickers)} A-shares...")
     cache = get_cache()
     ashare_tickers = [t for t in tickers if _is_ashare(t)]
     chunks = _chunk_tickers(ashare_tickers, chunk_size=3) # Smaller chunks for dense metrics
