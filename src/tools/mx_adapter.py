@@ -68,6 +68,8 @@ from src.data.models import (
     FinancialMetricsResponse,
     LineItem,
     LineItemResponse,
+    CompanyNews,
+    InsiderTrade,
 )
 
 logger = logging.getLogger(__name__)
@@ -497,7 +499,8 @@ def get_financial_metrics(
         f"净利润、归属于母公司股东的净利润、营业收入、营业总收入、"
         f"资产总计、负债合计、归属于母公司股东权益合计、"
         f"净利润/营业总收入(销售净利率)、销售毛利率、"
-        f"净资产收益率ROE、资产负债率、每股收益EPS(基本)"
+        f"净资产收益率ROE、资产负债率、每股收益EPS(基本)、"
+        f"市盈率TTM、市净率、市销率、股息率"
     )
     tables, _, _, err = _mx_query_tables(query)
     if err:
@@ -525,6 +528,12 @@ def get_financial_metrics(
             roe_raw = row.get("净资产收益率ROE", "")
             debt_ratio_raw = row.get("资产负债率", "")
             eps_raw = row.get("每股收益EPS(基本)", "")
+            
+            # Map PE, PB, PS, Div Yield
+            pe = _parse_chinese_number(row.get("市盈率TTM") or row.get("PE") or "0")
+            pb = _parse_chinese_number(row.get("市净率") or row.get("PB") or "0")
+            ps = _parse_chinese_number(row.get("市销率") or row.get("PS") or "0")
+            dy = _parse_chinese_number(row.get("股息率") or "0")
 
             total_assets = _parse_chinese_number(row.get("资产总计", "0"))
             total_debt   = _parse_chinese_number(row.get("负债合计", "0"))
@@ -539,9 +548,9 @@ def get_financial_metrics(
                     currency="CNY",
                     market_cap=None,
                     enterprise_value=None,
-                    price_to_earnings_ratio=None,
-                    price_to_book_ratio=None,
-                    price_to_sales_ratio=None,
+                    price_to_earnings_ratio=pe if pe > 0 else None,
+                    price_to_book_ratio=pb if pb > 0 else None,
+                    price_to_sales_ratio=ps if ps > 0 else None,
                     enterprise_value_to_ebitda_ratio=None,
                     enterprise_value_to_revenue_ratio=None,
                     free_cash_flow_yield=None,
@@ -609,8 +618,8 @@ def search_line_items(
     item_map: dict[str, str] = {
         "net_income":                    "净利润",
         "revenue":                       "营业收入",
-        "total_assets":                  "资产总计",
-        "total_debt":                    "负债合计",
+        "total_assets":                  "资产计",
+        "total_liabilities":             "负债合计",
         "shareholders_equity":           "归属于母公司股东权益合计",
         "capital_expenditure":           "购建固定资产无形资产和其他长期资产支付的现金",
         "depreciation_and_amortization": "折旧",
@@ -623,6 +632,9 @@ def search_line_items(
         "working_capital":               "营运资本",
         "ebitda":                        "EBITDA",
         "ebit":                          "息税前利润",
+        "research_and_development":      "研发费用",
+        "dividends_and_other_cash_distributions": "分配股利、利润或偿付利息支付的现金",
+        "issuance_or_purchase_of_equity_shares": "吸收投资收到的现金",
     }
 
     # Build a compact MX query asking for available items
@@ -710,6 +722,67 @@ def get_market_cap(
             cache._market_cap_cache = {}
         cache._market_cap_cache[cache_key] = cap
     return cap
+
+
+def get_company_news(
+    ticker: str,
+    end_date: str,
+    start_date: str | None = None,
+    limit: int = 10,
+    api_key: str | None = None,
+) -> list[CompanyNews]:
+    """Fetch recent news for an A-share ticker via MX."""
+    if not _is_ashare(ticker):
+        return []
+    code = _ticker_to_code(ticker)
+    query = f"{code}相关的最新新闻"
+    tables, _, _, err = _mx_query_tables(query)
+    if err or not tables:
+        return []
+
+    results = []
+    for table in tables:
+        for row in table.get("rows", []):
+            title = row.get("标题") or row.get("news_title") or ""
+            date = row.get("时间") or row.get("publish_date") or ""
+            url = row.get("链接") or row.get("url") or ""
+            source = row.get("来源") or row.get("source") or ""
+            if title:
+                results.append(CompanyNews(ticker=ticker, title=title, date=date, url=url, source=source))
+    return results[:limit]
+
+
+def get_insider_trades(
+    ticker: str,
+    end_date: str,
+    start_date: str | None = None,
+    limit: int = 1000,
+    api_key: str | None = None,
+) -> list[InsiderTrade]:
+    """Fetch insider trading activity for an A-share ticker via MX."""
+    if not _is_ashare(ticker):
+        return []
+    code = _ticker_to_code(ticker)
+    query = f"{code}最近的高管持股变动和增减持情况"
+    tables, _, _, err = _mx_query_tables(query)
+    if err or not tables:
+        return []
+
+    results = []
+    for table in tables:
+        for row in table.get("rows", []):
+            # MX columns vary, use heuristics
+            name = row.get("股东名称") or row.get("变动人") or "未知"
+            type = row.get("变动方向") or row.get("交易类型") or ""
+            qty = _parse_chinese_number(str(row.get("变动股数") or "0"))
+            results.append(InsiderTrade(
+                ticker=ticker,
+                name=name,
+                transaction_type=type,
+                transaction_shares=qty,
+                filing_date=row.get("公告日期") or ""
+            ))
+    return results[:limit]
 
 
 def prices_to_df(prices: list[Price]) -> "pd.DataFrame":  # noqa: F821

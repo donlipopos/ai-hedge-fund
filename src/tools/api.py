@@ -220,6 +220,10 @@ def get_insider_trades(
     api_key: str = None,
 ) -> list[InsiderTrade]:
     """Fetch insider trades from cache or API."""
+    if _is_ashare(ticker):
+        mx = _get_mx_adapter()
+        return mx.get_insider_trades(ticker, end_date, start_date=start_date, limit=limit, api_key=api_key)
+
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
     
@@ -286,6 +290,10 @@ def get_company_news(
     api_key: str = None,
 ) -> list[CompanyNews]:
     """Fetch company news from cache or API."""
+    if _is_ashare(ticker):
+        mx = _get_mx_adapter()
+        return mx.get_company_news(ticker, end_date, start_date=start_date, limit=limit, api_key=api_key)
+
     # Create a cache key that includes all parameters to ensure exact matches
     cache_key = f"{ticker}_{start_date or 'none'}_{end_date}_{limit}"
     
