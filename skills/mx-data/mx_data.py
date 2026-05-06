@@ -196,15 +196,18 @@ class MXData:
         :return: (tables, condition_parts, total_rows, error)
             tables: [{"sheet_name": str, "rows": list[dict], "fieldnames": list[str]}]
         """
+        if result is None:
+            return [], [], 0, "result 为空"
+
         status = result.get("status")
         message = result.get("message", "")
         if status != 0:
             return [], [], 0, f"顶层错误: 状态码 {status} - {message}"
         
-        data = result.get("data", {})
-        inner_data = data.get("data", {})
-        search_result = inner_data.get("searchDataResultDTO", {})
-        dto_list = search_result.get("dataTableDTOList", [])
+        data = result.get("data") or {}
+        inner_data = data.get("data") or {}
+        search_result = inner_data.get("searchDataResultDTO") or {}
+        dto_list = search_result.get("dataTableDTOList") or []
         
         if not dto_list:
             return [], [], 0, "接口返回中无 dataTableDTOList"
