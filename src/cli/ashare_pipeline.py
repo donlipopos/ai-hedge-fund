@@ -137,6 +137,7 @@ def run_ashare_pipeline(
         # Warm common line items used by Buffett and Liang Wenfeng agents
         common_line_items = [
             "net_income", "revenue", "total_assets", "total_liabilities", 
+            "current_assets", "current_liabilities",
             "shareholders_equity", "capital_expenditure", "depreciation_and_amortization", 
             "gross_profit", "free_cash_flow", "outstanding_shares",
             "research_and_development", "cash_and_equivalents", "earnings_per_share"

@@ -49,7 +49,7 @@ class TestMXAdapterBatch(unittest.TestCase):
     def test_warm_line_items_cache(self, mock_query):
         from src.tools.mx_adapter import warm_line_items_cache
         
-        # Mock data for line items (Net Income and R&D and EPS)
+        # Mock data for line items (Net Income and R&D and EPS and Liquidity)
         mock_table = {
             "sheet_name": "贵州茅台(600519.SH)",
             "rows": [
@@ -57,15 +57,17 @@ class TestMXAdapterBatch(unittest.TestCase):
                     "date": "2023-12-31",
                     "净利润": "747.3亿元",
                     "研发费用": "1.5亿元",
-                    "每股收益EPS(基本)": "59.49"
+                    "每股收益EPS(基本)": "59.49",
+                    "流动资产合计": "1000亿元",
+                    "流动负债合计": "200亿元"
                 }
             ],
-            "fieldnames": ["date", "净利润", "研发费用", "每股收益EPS(基本)"]
+            "fieldnames": ["date", "净利润", "研发费用", "每股收益EPS(基本)", "流动资产合计", "流动负债合计"]
         }
         mock_query.return_value = ([mock_table], ["贵州茅台(600519.SH)"], 1, None)
 
         tickers = ["600519.SH"]
-        line_items = ["net_income", "research_and_development", "earnings_per_share"]
+        line_items = ["net_income", "research_and_development", "earnings_per_share", "current_assets", "current_liabilities"]
         end_date = "2024-03-01"
         warm_line_items_cache(tickers, line_items, end_date, limit=1)
 
@@ -80,3 +82,5 @@ class TestMXAdapterBatch(unittest.TestCase):
         self.assertEqual(item.get("net_income"), 74730000000.0)
         self.assertEqual(item.get("research_and_development"), 150000000.0)
         self.assertEqual(item.get("earnings_per_share"), 59.49)
+        self.assertEqual(item.get("current_assets"), 100000000000.0)
+        self.assertEqual(item.get("current_liabilities"), 20000000000.0)

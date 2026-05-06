@@ -298,14 +298,14 @@ def warm_financial_metrics_cache(tickers: list[str], end_date: str, period: str 
         if not needed_codes:
             continue
             
-        # We query just the most recent N periods
         query = (
             f"{'和'.join(needed_codes)}近{limit}年年度报告的"
             f"净利润、归属于母公司股东的净利润、营业收入、营业总收入、"
-            f"资产总计、负债合计、归属于母公司股东权益合计、"
+            f"资产总计、负债合计、流动资产合计、流动负债合计、归属于母公司股东权益合计、"
             f"净利润/营业总收入(销售净利率)、销售毛利率、"
-            f"净资产收益率ROE、资产负债率、每股收益EPS(基本)、"
-            f"市盈率TTM、市净率、市销率、股息率"
+            f"净资产收益率ROE、资产负债率、基本每股收益、"
+            f"市盈率TTM、市净率、市销率、股息率、营业利润、总股本、"
+            f"每股净资产、每股自由现金流、营业收入同比增长、净利润同比增长"
         )
         tables, titles, _, err = _mx_query_tables(query)
         if err or not tables:
@@ -351,10 +351,18 @@ def warm_financial_metrics_cache(tickers: list[str], end_date: str, period: str 
                     dy = _parse_chinese_number(row.get("股息率") or "0")
 
                     total_assets = _parse_chinese_number(row.get("资产总计", "0"))
-                    total_debt   = _parse_chinese_number(row.get("负债合计", "0"))
-                    equity       = total_assets - total_debt
+                    total_liab   = _parse_chinese_number(row.get("负债合计", "0"))
+                    current_liab = _parse_chinese_number(row.get("流动负债合计", "0"))
+                    equity       = _parse_chinese_number(row.get("归属于母公司股东权益合计", "0")) or (total_assets - total_liab)
                     revenue      = _parse_chinese_number(row.get("营业收入", "0"))
+                    op_income    = _parse_chinese_number(row.get("营业利润", "0"))
                     net_income   = _parse_chinese_number(row.get("净利润", "0"))
+                    shares       = _parse_chinese_number(row.get("发行在外普通股加权平均数", "0"))
+
+                    bvps         = _parse_chinese_number(row.get("每股净资产") or "0") or ((equity / shares) if (equity and shares) else None)
+                    fcf_ps       = _parse_chinese_number(row.get("每股自由现金流") or "0")
+                    rev_growth   = _parse_chinese_number(row.get("营业收入同比增长") or "0")
+                    earn_growth  = _parse_chinese_number(row.get("净利润同比增长") or "0")
 
                     ticker_metrics[ticker].append(
                         FinancialMetrics(
@@ -372,11 +380,11 @@ def warm_financial_metrics_cache(tickers: list[str], end_date: str, period: str 
                             free_cash_flow_yield=None,
                             peg_ratio=None,
                             gross_margin=_parse_chinese_number(gross_margin_raw),
-                            operating_margin=None,
+                            operating_margin=(op_income / revenue) if revenue else None,
                             net_margin=_parse_chinese_number(net_margin_raw),
                             return_on_equity=_parse_chinese_number(roe_raw),
                             return_on_assets=(net_income / total_assets) if total_assets else None,
-                            return_on_invested_capital=None,
+                            return_on_invested_capital=(net_income / (total_assets - current_liab)) if (total_assets and total_assets > current_liab) else None,
                             asset_turnover=None,
                             inventory_turnover=None,
                             receivables_turnover=None,
@@ -387,20 +395,20 @@ def warm_financial_metrics_cache(tickers: list[str], end_date: str, period: str 
                             quick_ratio=None,
                             cash_ratio=None,
                             operating_cash_flow_ratio=None,
-                            debt_to_equity=(total_debt / equity) if equity else None,
+                            debt_to_equity=(total_liab / equity) if equity else None,
                             debt_to_assets=_parse_chinese_number(debt_ratio_raw),
                             interest_coverage=None,
-                            revenue_growth=None,
-                            earnings_growth=None,
+                            revenue_growth=rev_growth,
+                            earnings_growth=earn_growth,
                             book_value_growth=None,
-                            earnings_per_share_growth=None,
+                            earnings_per_share_growth=earn_growth,
                             free_cash_flow_growth=None,
                             operating_income_growth=None,
                             ebitda_growth=None,
                             payout_ratio=None,
                             earnings_per_share=_parse_chinese_number(eps_raw),
-                            book_value_per_share=None,
-                            free_cash_flow_per_share=None,
+                            book_value_per_share=bvps,
+                            free_cash_flow_per_share=fcf_ps,
                         )
                     )
 
@@ -431,8 +439,10 @@ def warm_line_items_cache(
     item_map: dict[str, str] = {
         "net_income":                    "净利润",
         "revenue":                       "营业收入",
-        "total_assets":                  "资产计",
+        "total_assets":                  "资产总计",
         "total_liabilities":             "负债合计",
+        "current_assets":                "流动资产合计",
+        "current_liabilities":           "流动负债合计",
         "shareholders_equity":           "归属于母公司股东权益合计",
         "capital_expenditure":           "购建固定资产无形资产和其他长期资产支付的现金",
         "depreciation_and_amortization": "折旧",
@@ -440,7 +450,7 @@ def warm_line_items_cache(
         "operating_income":              "营业利润",
         "interest_expense":              "利息支出",
         "cash_and_equivalents":          "货币资金",
-        "outstanding_shares":            "发行在外普通股加权平均数",
+        "outstanding_shares":            "总股本",
         "free_cash_flow":                "自由现金流",
         "working_capital":               "营运资本",
         "ebitda":                        "EBITDA",
@@ -448,7 +458,11 @@ def warm_line_items_cache(
         "research_and_development":      "研发费用",
         "dividends_and_other_cash_distributions": "分配股利、利润或偿付利息支付的现金",
         "issuance_or_purchase_of_equity_shares": "吸收投资收到的现金",
-        "earnings_per_share":            "每股收益EPS(基本)",
+        "earnings_per_share":            "基本每股收益",
+        "book_value_per_share":          "每股净资产",
+        "free_cash_flow_per_share":      "每股自由现金流",
+        "revenue_growth":                "营业收入同比增长",
+        "earnings_growth":               "净利润同比增长",
     }
 
     for chunk in chunks:
@@ -506,6 +520,14 @@ def warm_line_items_cache(
                             val = _parse_chinese_number(str(row[cn_name]))
                             setattr(item_data, eng_name, val)
                     
+                    # Compute derived fields if not directly returned by MX
+                    if item_data.operating_margin is None and item_data.operating_income and item_data.revenue:
+                        item_data.operating_margin = item_data.operating_income / item_data.revenue
+                    if item_data.roic is None and item_data.net_income and item_data.total_assets and item_data.current_liabilities:
+                        item_data.roic = item_data.net_income / (item_data.total_assets - item_data.current_liabilities)
+                    if item_data.book_value_per_share is None and item_data.shareholders_equity and item_data.outstanding_shares:
+                        item_data.book_value_per_share = item_data.shareholders_equity / item_data.outstanding_shares
+
                     ticker_items[ticker].append(item_data)
 
         # Cache results
@@ -607,11 +629,13 @@ def get_financial_metrics(
     query = (
         f"{code}近{limit}年年度报告的"
         f"净利润、归属于母公司股东的净利润、营业收入、营业总收入、"
-        f"资产总计、负债合计、归属于母公司股东权益合计、"
+        f"资产总计、负债合计、流动资产合计、流动负债合计、归属于母公司股东权益合计、"
         f"净利润/营业总收入(销售净利率)、销售毛利率、"
-        f"净资产收益率ROE、资产负债率、每股收益EPS(基本)、"
-        f"市盈率TTM、市净率、市销率、股息率"
+        f"净资产收益率ROE、资产负债率、基本每股收益、"
+        f"市盈率TTM、市净率、市销率、股息率、营业利润、总股本、"
+        f"每股净资产、每股自由现金流、营业收入同比增长、净利润同比增长"
     )
+
     tables, _, _, err = _mx_query_tables(query)
     if err:
         logger.warning("MX get_financial_metrics error for %s: %s", ticker, err)
@@ -628,7 +652,8 @@ def get_financial_metrics(
 
         for row in rows:
             period_str = _clean_date(row.get("date", ""))
-            if period_str in seen_periods:
+            # Skip rows/tables that don't have a valid date/period
+            if not period_str or period_str in seen_periods or len(period_str) < 4:
                 continue
             seen_periods.add(period_str)
 
@@ -646,9 +671,18 @@ def get_financial_metrics(
             dy = _parse_chinese_number(row.get("股息率") or "0")
 
             total_assets = _parse_chinese_number(row.get("资产总计", "0"))
-            total_debt   = _parse_chinese_number(row.get("负债合计", "0"))
-            equity       = total_assets - total_debt
+            total_liab   = _parse_chinese_number(row.get("负债合计", "0"))
+            current_liab = _parse_chinese_number(row.get("流动负债合计", "0"))
+            equity       = _parse_chinese_number(row.get("归属于母公司股东权益合计", "0")) or (total_assets - total_liab)
             revenue      = _parse_chinese_number(row.get("营业收入", "0"))
+            op_income    = _parse_chinese_number(row.get("营业利润", "0"))
+            net_income   = _parse_chinese_number(row.get("净利润", "0"))
+            shares       = _parse_chinese_number(row.get("发行在外普通股加权平均数", "0"))
+
+            bvps         = _parse_chinese_number(row.get("每股净资产") or "0") or ((equity / shares) if (equity and shares) else None)
+            fcf_ps       = _parse_chinese_number(row.get("每股自由现金流") or "0")
+            rev_growth   = _parse_chinese_number(row.get("营业收入同比增长") or "0")
+            earn_growth  = _parse_chinese_number(row.get("净利润同比增长") or "0")
 
             metrics.append(
                 FinancialMetrics(
@@ -666,11 +700,11 @@ def get_financial_metrics(
                     free_cash_flow_yield=None,
                     peg_ratio=None,
                     gross_margin=_parse_chinese_number(gross_margin_raw),
-                    operating_margin=None,
+                    operating_margin=(op_income / revenue) if revenue else None,
                     net_margin=_parse_chinese_number(net_margin_raw),
                     return_on_equity=_parse_chinese_number(roe_raw),
-                    return_on_assets=(net_income / total_assets) if (total_assets and (net_income := _parse_chinese_number(row.get("净利润", "0")))) else None,
-                    return_on_invested_capital=None,
+                    return_on_assets=(net_income / total_assets) if total_assets else None,
+                    return_on_invested_capital=(net_income / (total_assets - current_liab)) if (total_assets and total_assets > current_liab) else None,
                     asset_turnover=None,
                     inventory_turnover=None,
                     receivables_turnover=None,
@@ -681,20 +715,20 @@ def get_financial_metrics(
                     quick_ratio=None,
                     cash_ratio=None,
                     operating_cash_flow_ratio=None,
-                    debt_to_equity=(total_debt / equity) if equity else None,
+                    debt_to_equity=(total_liab / equity) if equity else None,
                     debt_to_assets=_parse_chinese_number(debt_ratio_raw),
                     interest_coverage=None,
-                    revenue_growth=None,
-                    earnings_growth=None,
+                    revenue_growth=rev_growth,
+                    earnings_growth=earn_growth,
                     book_value_growth=None,
-                    earnings_per_share_growth=None,
+                    earnings_per_share_growth=earn_growth,
                     free_cash_flow_growth=None,
                     operating_income_growth=None,
                     ebitda_growth=None,
                     payout_ratio=None,
                     earnings_per_share=_parse_chinese_number(eps_raw),
-                    book_value_per_share=None,
-                    free_cash_flow_per_share=None,
+                    book_value_per_share=bvps,
+                    free_cash_flow_per_share=fcf_ps,
                 )
             )
 
@@ -728,8 +762,10 @@ def search_line_items(
     item_map: dict[str, str] = {
         "net_income":                    "净利润",
         "revenue":                       "营业收入",
-        "total_assets":                  "资产计",
+        "total_assets":                  "资产总计",
         "total_liabilities":             "负债合计",
+        "current_assets":                "流动资产合计",
+        "current_liabilities":           "流动负债合计",
         "shareholders_equity":           "归属于母公司股东权益合计",
         "capital_expenditure":           "购建固定资产无形资产和其他长期资产支付的现金",
         "depreciation_and_amortization": "折旧",
@@ -737,7 +773,7 @@ def search_line_items(
         "operating_income":              "营业利润",
         "interest_expense":              "利息支出",
         "cash_and_equivalents":          "货币资金",
-        "outstanding_shares":            "发行在外普通股加权平均数",
+        "outstanding_shares":            "总股本",
         "free_cash_flow":                "自由现金流",
         "working_capital":               "营运资本",
         "ebitda":                        "EBITDA",
@@ -745,7 +781,11 @@ def search_line_items(
         "research_and_development":      "研发费用",
         "dividends_and_other_cash_distributions": "分配股利、利润或偿付利息支付的现金",
         "issuance_or_purchase_of_equity_shares": "吸收投资收到的现金",
-        "earnings_per_share":            "每股收益EPS(基本)",
+        "earnings_per_share":            "基本每股收益",
+        "book_value_per_share":          "每股净资产",
+        "free_cash_flow_per_share":      "每股自由现金流",
+        "revenue_growth":                "营业收入同比增长",
+        "earnings_growth":               "净利润同比增长",
     }
 
     # Build a compact MX query asking for available items
@@ -769,7 +809,8 @@ def search_line_items(
 
         for row in rows:
             period_str = _clean_date(row.get("date", ""))
-            if period_str in seen_periods:
+            # Skip rows/tables that don't have a valid date/period
+            if not period_str or period_str in seen_periods or len(period_str) < 4:
                 continue
             seen_periods.add(period_str)
 
@@ -781,8 +822,17 @@ def search_line_items(
             )
             # Map available fields back
             for eng_name, cn_name in item_map.items():
-                if cn_name in fieldnames:
-                    setattr(item_data, eng_name, _parse_chinese_number(row.get(cn_name, "0")))
+                if cn_name in row:
+                    setattr(item_data, eng_name, _parse_chinese_number(str(row[cn_name])))
+            
+            # Compute derived fields if not directly returned by MX
+            if item_data.operating_margin is None and item_data.operating_income and item_data.revenue:
+                item_data.operating_margin = item_data.operating_income / item_data.revenue
+            if item_data.roic is None and item_data.net_income and item_data.total_assets and item_data.current_liabilities:
+                item_data.roic = item_data.net_income / (item_data.total_assets - item_data.current_liabilities)
+            if item_data.book_value_per_share is None and item_data.shareholders_equity and item_data.outstanding_shares:
+                item_data.book_value_per_share = item_data.shareholders_equity / item_data.outstanding_shares
+
             results.append(item_data)
 
     results.sort(key=lambda i: i.report_period, reverse=True)
