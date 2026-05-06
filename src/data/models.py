@@ -104,18 +104,18 @@ class LineItemResponse(BaseModel):
 
 class InsiderTrade(BaseModel):
     ticker: str
-    issuer: str | None
-    name: str | None
-    title: str | None
-    is_board_director: bool | None
-    transaction_date: str | None
-    transaction_shares: float | None
-    transaction_price_per_share: float | None
-    transaction_value: float | None
-    shares_owned_before_transaction: float | None
-    shares_owned_after_transaction: float | None
-    security_title: str | None
-    filing_date: str
+    issuer: str | None = None
+    name: str | None = None
+    title: str | None = None
+    is_board_director: bool | None = None
+    transaction_date: str | None = None
+    transaction_shares: float | None = None
+    transaction_price_per_share: float | None = None
+    transaction_value: float | None = None
+    shares_owned_before_transaction: float | None = None
+    shares_owned_after_transaction: float | None = None
+    security_title: str | None = None
+    filing_date: str | None = None
 
 
 class InsiderTradeResponse(BaseModel):
@@ -126,9 +126,9 @@ class CompanyNews(BaseModel):
     ticker: str
     title: str
     author: str | None = None
-    source: str
-    date: str
-    url: str
+    source: str | None = None
+    date: str | None = None
+    url: str | None = None
     sentiment: str | None = None
 
 
