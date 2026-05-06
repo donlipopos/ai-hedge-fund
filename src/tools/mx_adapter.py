@@ -903,13 +903,21 @@ def get_company_news(
 
     results = []
     for table in tables:
-        for row in table.get("rows", []):
+        rows = table.get("rows", [])
+        if not rows:
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
             title = row.get("标题") or row.get("news_title") or ""
             date = row.get("时间") or row.get("publish_date") or ""
             url = row.get("链接") or row.get("url") or ""
             source = row.get("来源") or row.get("source") or ""
             if title:
-                results.append(CompanyNews(ticker=ticker, title=title, date=date, url=url, source=source))
+                try:
+                    results.append(CompanyNews(ticker=ticker, title=title, date=date, url=url, source=source))
+                except Exception as e:
+                    logger.warning(f"Error creating CompanyNews for {ticker}: {e}")
     return results[:limit]
 
 
@@ -931,18 +939,30 @@ def get_insider_trades(
 
     results = []
     for table in tables:
-        for row in table.get("rows", []):
+        rows = table.get("rows", [])
+        if not rows:
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
             # MX columns vary, use heuristics
             name = row.get("股东名称") or row.get("变动人") or "未知"
-            type = row.get("变动方向") or row.get("交易类型") or ""
+            # Map Chinese 'type' to security_title or similar if relevant, 
+            # but InsiderTrade doesn't have a generic 'type' field.
+            # We will put it in security_title as a hint.
+            trade_type = row.get("变动方向") or row.get("交易类型") or ""
             qty = _parse_chinese_number(str(row.get("变动股数") or "0"))
-            results.append(InsiderTrade(
-                ticker=ticker,
-                name=name,
-                transaction_type=type,
-                transaction_shares=qty,
-                filing_date=row.get("公告日期") or ""
-            ))
+            
+            try:
+                results.append(InsiderTrade(
+                    ticker=ticker,
+                    name=name,
+                    transaction_shares=qty,
+                    security_title=trade_type,
+                    filing_date=row.get("公告日期") or row.get("date") or ""
+                ))
+            except Exception as e:
+                logger.warning(f"Error creating InsiderTrade for {ticker}: {e}")
     return results[:limit]
 
 
