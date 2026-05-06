@@ -186,6 +186,7 @@ def _clean_date(date_str: str) -> str:
         "2026-04-15(日)" → "2026-04-15"
         "2026-04-15"     → "2026-04-15"
         "2025年报"        → "2025-12-31"
+        "2026一季报"      → "2026-03-31"
     """
     s = date_str.strip()
     # Strip weekday annotation
@@ -195,10 +196,16 @@ def _clean_date(date_str: str) -> str:
         return datetime.strptime(s[:10], "%Y-%m-%d").strftime("%Y-%m-%d")
     except ValueError:
         pass
-    # Annual report shorthand "2025年报" → last day of year
-    m = re.match(r"^(\d{4})年报?$", s)
-    if m:
-        return f"{m.group(1)}-12-31"
+    
+    # Quarterly shorthand
+    m_year = re.search(r"(\d{4})", s)
+    if m_year:
+        year = m_year.group(1)
+        if "一季报" in s: return f"{year}-03-31"
+        if "中报" in s or "半年报" in s: return f"{year}-06-30"
+        if "三季报" in s: return f"{year}-09-30"
+        if "年报" in s: return f"{year}-12-31"
+
     # Fallback: return as-is
     return s[:10] if len(s) >= 10 else s
 
@@ -298,121 +305,152 @@ def warm_financial_metrics_cache(tickers: list[str], end_date: str, period: str 
         if not needed_codes:
             continue
             
-        query = (
-            f"{'和'.join(needed_codes)}近{limit}年年度报告的"
-            f"净利润、归属于母公司股东的净利润、营业收入、营业总收入、"
-            f"资产总计、负债合计、流动资产合计、流动负债合计、归属于母公司股东权益合计、"
-            f"净利润/营业总收入(销售净利率)、销售毛利率、"
-            f"净资产收益率ROE、资产负债率、基本每股收益、"
-            f"市盈率TTM、市净率、市销率、股息率、营业利润、总股本、"
-            f"每股净资产、每股自由现金流、营业收入同比增长、净利润同比增长"
-        )
-        tables, titles, _, err = _mx_query_tables(query)
-        if err or not tables:
+        # MX queries: Use '历年年报' for reliable history and split to avoid field dropping
+        needed_codes_str = '和'.join(needed_codes)
+        q1 = f"{needed_codes_str}历年年报的净利润、营业收入、资产总计、负债合计、流动资产合计、流动负债合计"
+        q2 = f"{needed_codes_str}历年年报的每股收益、每股净资产、ROE、市盈率TTM、市净率、股息率"
+
+        tables1, titles1, _, err1 = _mx_query_tables(q1)
+        tables2, titles2, _, err2 = _mx_query_tables(q2)
+
+        if (not tables1) and (not tables2):
             continue
-            
+
         code_to_ticker = {c: t for c, t in zip(needed_codes, needed_tickers)}
-        
-        # Group rows by ticker
-        ticker_metrics: dict[str, list[FinancialMetrics]] = {t: [] for t in needed_tickers}
-        
-        for i, table in enumerate(tables):
-            # Extract code from the title (sheet name)
-            title = table.get("sheet_name")
-            if not title:
-                title = titles[i] if i < len(titles) else ""
-            code = _extract_code_from_string(title)
-            
-            if code and code in code_to_ticker:
-                ticker = code_to_ticker[code]
-                
-                rows = table.get("rows", [])
-                fieldnames = table.get("fieldnames", [])
-                if not rows or "净利润" not in fieldnames:
-                    continue
 
-                seen_periods = set()
-                for row in rows:
-                    period_str = _clean_date(row.get("date", ""))
-                    if period_str in seen_periods:
-                        continue
-                    seen_periods.add(period_str)
+        # Group rows by ticker AND period
+        # ticker_period_data[ticker][period] = combined_row
+        ticker_period_data: dict[str, dict[str, dict]] = {t: {} for t in needed_tickers}
 
-                    # Use pre-calculated ratios from MX where available
-                    net_margin_raw = row.get("净利润/营业总收入(销售净利率)") or row.get("销售净利率") or ""
-                    gross_margin_raw = row.get("销售毛利率") or ""
-                    roe_raw = row.get("净资产收益率ROE(加权)") or row.get("净资产收益率ROE") or row.get("ROE") or row.get("净资产收益率") or ""
+        for batch_tables, batch_titles in [(tables1, titles1), (tables2, titles2)]:
+            if not batch_tables: continue
+            for i, table in enumerate(batch_tables):
+                title = table.get("sheet_name") or (batch_titles[i] if batch_titles and i < len(batch_titles) else "")
+                if "预测" in title: continue
 
-                    debt_ratio_raw = row.get("资产负债率") or ""
-                    eps_raw = row.get("基本每股收益") or row.get("每股收益") or ""
+                code = _extract_code_from_string(title)
+                if code and code in code_to_ticker:
+                    ticker = code_to_ticker[code]
+                    rows = table.get("rows", [])
+                    fieldnames = table.get("fieldnames", [])
+                    if not rows: continue
                     
-                    # Map PE, PB, PS, Div Yield
-                    pe = _parse_chinese_number(row.get("市盈率TTM") or row.get("PE") or row.get("市盈率(TTM)") or "0")
-                    pb = _parse_chinese_number(row.get("市净率") or row.get("PB") or row.get("市净率(PB)") or "0")
-                    ps = _parse_chinese_number(row.get("市销率") or row.get("PS") or row.get("市销率(TTM)") or "0")
-                    dy = _parse_chinese_number(row.get("股息率") or row.get("股息率(%)") or "0")
+                    # Heuristic for financial report tables
+                    financial_keys = {"净利润", "营业收入", "每股收益", "每股净资产", "ROE", "资产总计"}
+                    if (not any(k in "".join(fieldnames) for k in financial_keys) or 
+                        any(re.search(r"\d{4}[.-]\d{2}[.-]\d{2}", f) for f in fieldnames)):
+                        continue
 
-                    total_assets = _parse_chinese_number(row.get("资产总计") or row.get("资产总额") or row.get("资产计") or "0")
-                    total_liab   = _parse_chinese_number(row.get("负债合计") or row.get("负债总额") or "0")
-                    current_liab = _parse_chinese_number(row.get("流动负债合计") or row.get("流动负债") or "0")
-                    equity       = _parse_chinese_number(row.get("归属于母公司股东权益合计") or row.get("净资产") or "0") or (total_assets - total_liab)
-                    revenue      = _parse_chinese_number(row.get("营业收入") or row.get("营收") or row.get("营业总收入") or "0")
-                    op_income    = _parse_chinese_number(row.get("营业利润") or "0")
-                    net_income   = _parse_chinese_number(row.get("净利润") or row.get("归母净利润") or "0")
-                    shares       = _parse_chinese_number(row.get("总股本") or row.get("发行在外普通股加权平均数") or "0")
+                    for row in rows:
+                        if not isinstance(row, dict): continue
+                        r_clean = {k.strip(): v for k, v in row.items()}
+                        # Skip rows with forecast data
+                        if any("预测" in k for k in r_clean.keys()):
+                            continue
+                            
+                        period = _clean_date(r_clean.get("date", ""))
+                        # Skip invalid dates or daily dates (must be quarter-end)
+                        if not period or len(period) < 10 or not any(period.endswith(q) for q in ("-03-31", "-06-30", "-09-30", "-12-31")):
+                            continue
+                        # Skip future dates
+                        try:
+                            if int(period[:4]) > datetime.now().year + 1: continue
+                        except: pass
 
-                    bvps         = _parse_chinese_number(row.get("每股净资产") or row.get("每股净资产(元)") or "0") or ((equity / shares) if (equity and shares) else None)
-                    fcf_ps       = _parse_chinese_number(row.get("每股自由现金流") or row.get("每股自由现金流(元)") or "0")
-                    rev_growth   = _parse_chinese_number(row.get("营业收入同比增长") or row.get("营收同比增长") or "0")
-                    earn_growth  = _parse_chinese_number(row.get("净利润同比增长") or row.get("归母净利润同比增长") or "0")
+                        if period not in ticker_period_data[ticker]:
+                            ticker_period_data[ticker][period] = r_clean
+                        else:
+                            ticker_period_data[ticker][period].update(r_clean)
 
-                    ticker_metrics[ticker].append(
-                        FinancialMetrics(
-                            ticker=ticker,
-                            report_period=period_str,
-                            period=period,
-                            currency="CNY",
-                            market_cap=None,
-                            enterprise_value=None,
-                            price_to_earnings_ratio=pe if pe > 0 else None,
-                            price_to_book_ratio=pb if pb > 0 else None,
-                            price_to_sales_ratio=ps if ps > 0 else None,
-                            enterprise_value_to_ebitda_ratio=None,
-                            enterprise_value_to_revenue_ratio=None,
-                            free_cash_flow_yield=dy if dy > 0 else None,
-                            peg_ratio=None,
-                            gross_margin=_parse_chinese_number(gross_margin_raw),
-                            operating_margin=(op_income / revenue) if revenue else None,
-                            net_margin=_parse_chinese_number(net_margin_raw),
-                            return_on_equity=_parse_chinese_number(roe_raw),
-                            return_on_assets=(net_income / total_assets) if total_assets else None,
-                            return_on_invested_capital=(net_income / (total_assets - current_liab)) if (total_assets and total_assets > current_liab) else None,
-                            asset_turnover=None,
-                            inventory_turnover=None,
-                            receivables_turnover=None,
-                            days_sales_outstanding=None,
-                            operating_cycle=None,
-                            working_capital_turnover=None,
-                            current_ratio=None,
-                            quick_ratio=None,
-                            cash_ratio=None,
-                            operating_cash_flow_ratio=None,
-                            debt_to_equity=(total_liab / equity) if equity else None,
-                            debt_to_assets=_parse_chinese_number(debt_ratio_raw),
-                            interest_coverage=None,
-                            revenue_growth=rev_growth,
-                            earnings_growth=earn_growth,
-                            book_value_growth=None,
-                            earnings_per_share_growth=earn_growth,
-                            free_cash_flow_growth=None,
-                            operating_income_growth=None,
-                            ebitda_growth=None,
-                            payout_ratio=None,
-                            earnings_per_share=_parse_chinese_number(eps_raw) or _parse_chinese_number(row.get("基本每股收益") or row.get("EPS") or "0"),
-                            book_value_per_share=bvps,
-                            free_cash_flow_per_share=fcf_ps,
-                        )
+        # Build FinancialMetrics objects
+        ticker_metrics: dict[str, list[FinancialMetrics]] = {t: [] for t in needed_tickers}
+
+        for ticker, periods in ticker_period_data.items():
+            seen_periods = set()
+            # Sort periods descending for this ticker
+            sorted_p = sorted(periods.keys(), reverse=True)
+            for period_str in sorted_p[:limit]:
+                r = periods[period_str]
+                if period_str in seen_periods: continue
+                seen_periods.add(period_str)
+
+                # Use pre-calculated ratios from MX where available
+                net_margin_raw = r.get("净利润/营业总收入(销售净利率)") or r.get("销售净利率") or ""
+                gross_margin_raw = r.get("销售毛利率") or ""
+                roe_raw = r.get("净资产收益率ROE(加权)") or r.get("净资产收益率ROE") or r.get("ROE") or r.get("净资产收益率") or ""
+                debt_ratio_raw = r.get("资产负债率") or ""
+                eps_raw = r.get("每股收益EPS(基本)") or r.get("基本每股收益") or r.get("每股收益") or r.get("每股收益EPS(TTM)") or r.get("EPS") or ""
+                bvps_raw = r.get("每股净资产BPS") or r.get("每股净资产") or r.get("每股净资产(元)") or ""
+
+                # Map PE, PB, PS, Div Yield
+                pe = _parse_chinese_number(r.get("市盈率TTM") or r.get("PE") or r.get("市盈率(TTM)") or "0")
+                pb = _parse_chinese_number(r.get("市净率") or r.get("PB") or r.get("市净率(PB)") or "0")
+                ps = _parse_chinese_number(r.get("市销率") or r.get("PS") or r.get("市销率(TTM)") or "0")
+                dy = _parse_chinese_number(r.get("股息率") or r.get("股息率(%)") or "0")
+                mkt_cap = _parse_chinese_number(r.get("总市值") or r.get("市值") or "0")
+
+                total_assets = _parse_chinese_number(r.get("资产总计") or r.get("资产总额") or r.get("资产计") or "0")
+                total_liab   = _parse_chinese_number(r.get("负债合计") or r.get("负债总额") or "0")
+                current_liab = _parse_chinese_number(r.get("流动负债合计") or r.get("流动负债") or "0")
+                equity       = _parse_chinese_number(r.get("归属于母公司股东权益合计") or r.get("净资产") or "0") or (total_assets - total_liab)
+                revenue      = _parse_chinese_number(r.get("营业收入") or r.get("营收") or r.get("营业总收入") or "0")
+                op_income    = _parse_chinese_number(r.get("营业利润") or "0")
+                net_income   = _parse_chinese_number(r.get("净利润") or r.get("归母净利润") or "0")
+                shares       = _parse_chinese_number(r.get("总股本") or r.get("发行在外普通股加权平均数") or "0")
+
+                bvps         = _parse_chinese_number(bvps_raw) or ((equity / shares) if (equity and shares) else None)
+                fcf_ps       = _parse_chinese_number(r.get("每股自由现金流") or r.get("每股自由现金流(元)") or r.get("每股企业自由现金流量") or "0")
+                rev_growth   = _parse_chinese_number(r.get("营业收入同比增长") or r.get("营收同比增长") or r.get("营业收入同比增长率") or "0")
+                earn_growth  = _parse_chinese_number(r.get("净利润同比增长") or r.get("归母净利润同比增长") or r.get("净利润同比增长率") or "0")
+
+                ticker_metrics[ticker].append(
+                    FinancialMetrics(
+                        ticker=ticker,
+                        report_period=period_str,
+                        period=period,
+                        currency="CNY",
+                        market_cap=mkt_cap if mkt_cap > 0 else None,
+                        enterprise_value=None,
+                        price_to_earnings_ratio=pe if pe > 0 else None,
+                        price_to_book_ratio=pb if pb > 0 else None,
+                        price_to_sales_ratio=ps if ps > 0 else None,
+                        enterprise_value_to_ebitda_ratio=None,
+                        enterprise_value_to_revenue_ratio=None,
+                        free_cash_flow_yield=dy if dy > 0 else None,
+
+                        peg_ratio=None,
+                        gross_margin=_parse_chinese_number(gross_margin_raw),
+                        operating_margin=(op_income / revenue) if revenue else None,
+                        net_margin=_parse_chinese_number(net_margin_raw),
+                        return_on_equity=_parse_chinese_number(roe_raw),
+                        return_on_assets=(net_income / total_assets) if total_assets else None,
+                        return_on_invested_capital=(net_income / (total_assets - current_liab)) if (total_assets and total_assets > current_liab) else None,
+                        asset_turnover=None,
+                        inventory_turnover=None,
+                        receivables_turnover=None,
+                        days_sales_outstanding=None,
+                        operating_cycle=None,
+                        working_capital_turnover=None,
+                        current_ratio=None,
+                        quick_ratio=None,
+                        cash_ratio=None,
+                        operating_cash_flow_ratio=None,
+                        debt_to_equity=(total_liab / equity) if equity else None,
+                        debt_to_assets=_parse_chinese_number(r.get("资产负债率") or "0"),
+                        interest_coverage=None,
+                        revenue_growth=rev_growth,
+                        earnings_growth=earn_growth,
+                        book_value_growth=None,
+                        earnings_per_share_growth=earn_growth,
+                        free_cash_flow_growth=None,
+                        operating_income_growth=None,
+                        ebitda_growth=None,
+                        payout_ratio=None,
+                        earnings_per_share=_parse_chinese_number(eps_raw) or None,
+                        book_value_per_share=bvps,
+                        free_cash_flow_per_share=fcf_ps,
                     )
+                )
 
         # Sort and cache
         for ticker, metrics in ticker_metrics.items():
@@ -505,11 +543,15 @@ def warm_line_items_cache(
 
                 seen_periods = set()
                 for row in rows:
-                    period_str = _clean_date(row.get("date", ""))
+                    if not isinstance(row, dict):
+                        continue
+                    # MX sometimes returns keys with leading/trailing spaces
+                    r = {k.strip(): v for k, v in row.items()}
+
+                    period_str = _clean_date(r.get("date", ""))
                     if period_str in seen_periods:
                         continue
                     seen_periods.add(period_str)
-
                     item_data = LineItem(
                         ticker=ticker,
                         report_period=period_str,
@@ -642,115 +684,150 @@ def get_financial_metrics(
         return [FinancialMetrics(**m) for m in cached]
 
     code = _ticker_to_code(ticker)
-    # MX query: ask for key metrics across multiple periods
-    query = (
-        f"{code}近{limit}年年度报告的"
-        f"净利润、归属于母公司股东的净利润、营业收入、营业总收入、"
-        f"资产总计、负债合计、流动资产合计、流动负债合计、归属于母公司股东权益合计、"
-        f"净利润/营业总收入(销售净利率)、销售毛利率、"
-        f"净资产收益率ROE、资产负债率、基本每股收益、"
-        f"市盈率TTM、市净率、市销率、股息率、营业利润、总股本、"
-        f"每股净资产、每股自由现金流、营业收入同比增长、净利润同比增长"
-    )
-
-    tables, _, _, err = _mx_query_tables(query)
-    if err:
-        logger.warning("MX get_financial_metrics error for %s: %s", ticker, err)
+    # MX queries: Use '历年年报' for reliable history and split to avoid field dropping
+    q1 = f"{code}历年年报的净利润、营业收入、资产总计、负债合计、流动资产合计、流动负债合计"
+    q2 = f"{code}历年年报的每股收益、每股净资产、ROE、市盈率TTM、市净率、股息率"
+    
+    tables1, titles1, _, err1 = _mx_query_tables(q1)
+    tables2, titles2, _, err2 = _mx_query_tables(q2)
+    
+    if (not tables1) and (not tables2):
+        logger.warning("MX get_financial_metrics total failure for %s", ticker)
         return []
 
     metrics: list[FinancialMetrics] = []
-    seen_periods: set[str] = set()
-
-    for table in tables:
-        fieldnames = table.get("fieldnames", [])
-        rows = table.get("rows", [])
-        if not rows or "净利润" not in fieldnames:
-            continue
-
-        for row in rows:
-            period_str = _clean_date(row.get("date", ""))
-            # Skip rows/tables that don't have a valid date/period
-            if not period_str or period_str in seen_periods or len(period_str) < 4:
-                continue
-            seen_periods.add(period_str)
-
-            # Use pre-calculated ratios from MX where available
-            net_margin_raw = row.get("净利润/营业总收入(销售净利率)") or row.get("销售净利率") or ""
-            gross_margin_raw = row.get("销售毛利率") or ""
-            roe_raw = row.get("净资产收益率ROE(加权)") or row.get("净资产收益率ROE") or row.get("ROE") or row.get("净资产收益率") or ""
-
-            debt_ratio_raw = row.get("资产负债率") or ""
-            eps_raw = row.get("基本每股收益") or row.get("每股收益") or ""
+    
+    # Combine data from all valid financial tables
+    period_data: dict[str, dict] = {}
+    
+    for batch_tables, batch_titles in [(tables1, titles1), (tables2, titles2)]:
+        if not batch_tables: continue
+        for i, table in enumerate(batch_tables):
+            title = table.get("sheet_name") or (batch_titles[i] if batch_titles and i < len(batch_titles) else "")
             
-            # Map PE, PB, PS, Div Yield
-            pe = _parse_chinese_number(row.get("市盈率TTM") or row.get("PE") or row.get("市盈率(TTM)") or "0")
-            pb = _parse_chinese_number(row.get("市净率") or row.get("PB") or row.get("市净率(PB)") or "0")
-            ps = _parse_chinese_number(row.get("市销率") or row.get("PS") or row.get("市销率(TTM)") or "0")
-            dy = _parse_chinese_number(row.get("股息率") or row.get("股息率(%)") or "0")
-            mkt_cap = _parse_chinese_number(row.get("总市值") or row.get("市值") or "0")
+            rows = table.get("rows", [])
+            fieldnames = table.get("fieldnames", [])
+            
+            if "预测" in title: continue
+            if not rows: continue
+            
+            # Heuristic for financial report tables: 
+            # - Must have core financial keys
+            # - Fieldnames should NOT contain specific daily dates (e.g. 2026.05.06)
+            financial_keys = {"净利润", "营业收入", "每股收益", "每股净资产", "ROE", "资产总计"}
+            has_fin = any(k in "".join(fieldnames) for k in financial_keys)
+            has_daily = any(re.search(r"\d{4}[.-]\d{2}[.-]\d{2}", f) for f in fieldnames)
+            
+            if not has_fin or has_daily:
+                continue
+                
+            for row in rows:
+                if not isinstance(row, dict): continue
+                r_clean = {k.strip(): v for k, v in row.items()}
+                # Skip rows that look like current daily data (heavily date-suffixed keys)
+                if sum(1 for k in r_clean.keys() if re.search(r"\d{4}[.-]\d{2}[.-]\d{2}", k)) > 2:
+                    continue
+                    
+                period = _clean_date(r_clean.get("date", ""))
+                # Skip invalid dates or daily dates (must be quarter-end: 03-31, 06-30, 09-30, 12-31)
+                if not period or len(period) < 10 or not any(period.endswith(q) for q in ("-03-31", "-06-30", "-09-30", "-12-31")):
+                    continue
+                # Skip future dates
+                try:
+                    if int(period[:4]) > datetime.now().year + 1: continue
+                except: pass
+                
+                if period not in period_data:
+                    period_data[period] = r_clean
+                else:
+                    period_data[period].update(r_clean)
 
-            total_assets = _parse_chinese_number(row.get("资产总计") or row.get("资产总额") or row.get("资产计") or "0")
-            total_liab   = _parse_chinese_number(row.get("负债合计") or row.get("负债总额") or "0")
-            current_liab = _parse_chinese_number(row.get("流动负债合计") or row.get("流动负债") or "0")
-            equity       = _parse_chinese_number(row.get("归属于母公司股东权益合计") or row.get("净资产") or "0") or (total_assets - total_liab)
-            revenue      = _parse_chinese_number(row.get("营业收入") or row.get("营收") or row.get("营业总收入") or "0")
-            op_income    = _parse_chinese_number(row.get("营业利润") or "0")
-            net_income   = _parse_chinese_number(row.get("净利润") or row.get("归母净利润") or "0")
-            shares       = _parse_chinese_number(row.get("总股本") or row.get("发行在外普通股加权平均数") or "0")
+    # Sort periods descending
+    sorted_periods = sorted(period_data.keys(), reverse=True)
+    seen_periods = set()
 
-            bvps         = _parse_chinese_number(row.get("每股净资产") or row.get("每股净资产(元)") or "0") or ((equity / shares) if (equity and shares) else None)
-            fcf_ps       = _parse_chinese_number(row.get("每股自由现金流") or row.get("每股自由现金流(元)") or "0")
-            rev_growth   = _parse_chinese_number(row.get("营业收入同比增长") or row.get("营收同比增长") or "0")
-            earn_growth  = _parse_chinese_number(row.get("净利润同比增长") or row.get("归母净利润同比增长") or "0")
+    for period_str in sorted_periods[:limit]:
+        r = period_data[period_str]
+        if period_str in seen_periods: continue
+        seen_periods.add(period_str)
 
-            metrics.append(
-                FinancialMetrics(
-                    ticker=ticker,
-                    report_period=period_str,
-                    period=period,
-                    currency="CNY",
-                    market_cap=mkt_cap if mkt_cap > 0 else None,
-                    enterprise_value=None,
+        # Use pre-calculated ratios from MX where available
+        net_margin_raw = r.get("净利润/营业总收入(销售净利率)") or r.get("销售净利率") or ""
+        gross_margin_raw = r.get("销售毛利率") or ""
+        roe_raw = r.get("净资产收益率ROE(加权)") or r.get("净资产收益率ROE") or r.get("ROE") or r.get("净资产收益率") or ""
+        debt_ratio_raw = r.get("资产负债率") or ""
+        eps_raw = r.get("每股收益EPS(基本)") or r.get("基本每股收益") or r.get("每股收益") or r.get("每股收益EPS(TTM)") or r.get("EPS") or ""
+        bvps_raw = r.get("每股净资产BPS") or r.get("每股净资产") or r.get("每股净资产(元)") or ""
+        
+        # Map PE, PB, PS, Div Yield
+        pe = _parse_chinese_number(r.get("市盈率TTM") or r.get("PE") or r.get("市盈率(TTM)") or "0")
+        pb = _parse_chinese_number(r.get("市净率") or r.get("PB") or r.get("市净率(PB)") or "0")
+        ps = _parse_chinese_number(r.get("市销率") or r.get("PS") or r.get("市销率(TTM)") or "0")
+        dy = _parse_chinese_number(r.get("股息率") or r.get("股息率(%)") or "0")
+        mkt_cap = _parse_chinese_number(r.get("总市值") or r.get("市值") or "0")
 
-                    price_to_earnings_ratio=pe if pe > 0 else None,
-                    price_to_book_ratio=pb if pb > 0 else None,
-                    price_to_sales_ratio=ps if ps > 0 else None,
-                    enterprise_value_to_ebitda_ratio=None,
-                    enterprise_value_to_revenue_ratio=None,
-                    free_cash_flow_yield=dy if dy > 0 else None,
-                    peg_ratio=None,
-                    gross_margin=_parse_chinese_number(gross_margin_raw),
-                    operating_margin=(op_income / revenue) if revenue else None,
-                    net_margin=_parse_chinese_number(net_margin_raw),
-                    return_on_equity=_parse_chinese_number(roe_raw),
-                    return_on_assets=(net_income / total_assets) if total_assets else None,
-                    return_on_invested_capital=(net_income / (total_assets - current_liab)) if (total_assets and total_assets > current_liab) else None,
-                    asset_turnover=None,
-                    inventory_turnover=None,
-                    receivables_turnover=None,
-                    days_sales_outstanding=None,
-                    operating_cycle=None,
-                    working_capital_turnover=None,
-                    current_ratio=None,
-                    quick_ratio=None,
-                    cash_ratio=None,
-                    operating_cash_flow_ratio=None,
-                    debt_to_equity=(total_liab / equity) if equity else None,
-                    debt_to_assets=_parse_chinese_number(debt_ratio_raw),
-                    interest_coverage=None,
-                    revenue_growth=rev_growth,
-                    earnings_growth=earn_growth,
-                    book_value_growth=None,
-                    earnings_per_share_growth=earn_growth,
-                    free_cash_flow_growth=None,
-                    operating_income_growth=None,
-                    ebitda_growth=None,
-                    payout_ratio=None,
-                    earnings_per_share=_parse_chinese_number(eps_raw) or _parse_chinese_number(row.get("基本每股收益") or row.get("EPS") or "0"),
-                    book_value_per_share=bvps,
-                    free_cash_flow_per_share=fcf_ps,
-                )
+        total_assets = _parse_chinese_number(r.get("资产总计") or r.get("资产总额") or r.get("资产计") or "0")
+        total_liab   = _parse_chinese_number(r.get("负债合计") or r.get("负债总额") or "0")
+        current_liab = _parse_chinese_number(r.get("流动负债合计") or r.get("流动负债") or "0")
+        equity       = _parse_chinese_number(r.get("归属于母公司股东权益合计") or r.get("净资产") or "0") or (total_assets - total_liab)
+        revenue      = _parse_chinese_number(r.get("营业收入") or r.get("营收") or r.get("营业总收入") or "0")
+        op_income    = _parse_chinese_number(r.get("营业利润") or "0")
+        net_income   = _parse_chinese_number(r.get("净利润") or r.get("归母净利润") or "0")
+        shares       = _parse_chinese_number(r.get("总股本") or r.get("发行在外普通股加权平均数") or "0")
+
+        bvps         = _parse_chinese_number(bvps_raw) or ((equity / shares) if (equity and shares) else None)
+        fcf_ps       = _parse_chinese_number(r.get("每股自由现金流") or r.get("每股自由现金流(元)") or r.get("每股企业自由现金流量") or "0")
+        rev_growth   = _parse_chinese_number(r.get("营业收入同比增长") or r.get("营收同比增长") or r.get("营业收入同比增长率") or "0")
+        earn_growth  = _parse_chinese_number(r.get("净利润同比增长") or r.get("归母净利润同比增长") or r.get("净利润同比增长率") or "0")
+
+        metrics.append(
+            FinancialMetrics(
+                ticker=ticker,
+                report_period=period_str,
+                period=period,
+                currency="CNY",
+                market_cap=mkt_cap if mkt_cap > 0 else None,
+                enterprise_value=None,
+                price_to_earnings_ratio=pe if pe > 0 else None,
+                price_to_book_ratio=pb if pb > 0 else None,
+                price_to_sales_ratio=ps if ps > 0 else None,
+                enterprise_value_to_ebitda_ratio=None,
+                enterprise_value_to_revenue_ratio=None,
+                free_cash_flow_yield=dy if dy > 0 else None,
+
+                peg_ratio=None,
+                gross_margin=_parse_chinese_number(gross_margin_raw),
+                operating_margin=(op_income / revenue) if revenue else None,
+                net_margin=_parse_chinese_number(net_margin_raw),
+                return_on_equity=_parse_chinese_number(roe_raw),
+                return_on_assets=(net_income / total_assets) if total_assets else None,
+                return_on_invested_capital=(net_income / (total_assets - current_liab)) if (total_assets and total_assets > current_liab) else None,
+                asset_turnover=None,
+                inventory_turnover=None,
+                receivables_turnover=None,
+                days_sales_outstanding=None,
+                operating_cycle=None,
+                working_capital_turnover=None,
+                current_ratio=None,
+                quick_ratio=None,
+                cash_ratio=None,
+                operating_cash_flow_ratio=None,
+                debt_to_equity=(total_liab / equity) if equity else None,
+                debt_to_assets=_parse_chinese_number(debt_ratio_raw),
+                interest_coverage=None,
+                revenue_growth=rev_growth,
+                earnings_growth=earn_growth,
+                book_value_growth=None,
+                earnings_per_share_growth=earn_growth,
+                free_cash_flow_growth=None,
+                operating_income_growth=None,
+                ebitda_growth=None,
+                payout_ratio=None,
+                earnings_per_share=_parse_chinese_number(eps_raw) or None,
+                book_value_per_share=bvps,
+                free_cash_flow_per_share=fcf_ps,
             )
+        )
     # Sort by period descending (most recent first) and apply limit
     metrics.sort(key=lambda m: m.report_period, reverse=True)
     result = metrics[:limit]
