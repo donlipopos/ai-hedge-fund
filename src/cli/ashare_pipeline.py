@@ -76,21 +76,34 @@ def _run_xuangu_screening(criteria: str, max_candidates: int = 20) -> list[dict]
 
     today = datetime.now().strftime("%Y.%m.%d")
     candidates = []
-    for row in rows[:max_candidates]:
+    for i, row in enumerate(rows[:max_candidates]):
         code = row.get("代码", "").strip()
         market = row.get("市场代码简称", "SZ").strip()
         name = row.get("名称", "").strip()
         if not code:
             continue
+            
+        # Robustly find fields by matching key substrings
+        price = next((v for k, v in row.items() if "最新价" in k), "")
+        pct = next((v for k, v in row.items() if "涨跌幅" in k), "")
+        roe = next((v for k, v in row.items() if "ROE" in k and "加权" in k), "")
+        if not roe:
+            roe = next((v for k, v in row.items() if "ROE" in k or "净资产收益率" in k), "")
+        
+        # Prefer Total Market Cap (总市值), fallback to Circulating (流通市值)
+        mkt = next((v for k, v in row.items() if "总市值" in k), "")
+        if not mkt:
+            mkt = next((v for k, v in row.items() if "流通市值" in k or "市值" in k), "")
+
         candidates.append({
             "ticker": _code_to_ticker(code, market),
             "name": name,
             "code": code,
             "market": market,
-            "latest_price": row.get(f"最新价(元) {today}", ""),
-            "pct_change": row.get(f"涨跌幅(%) {today}", ""),
-            "roe": row.get(f"净资产收益率ROE(加权)(%) 截至{today}最新", ""),
-            "mkt_cap": row.get(f"流通市值(元) {today}", ""),
+            "latest_price": price,
+            "pct_change": pct,
+            "roe": roe,
+            "mkt_cap": mkt,
         })
     return candidates
 
@@ -128,7 +141,20 @@ def run_ashare_pipeline(
     more = " ..." if len(candidates) > 5 else ""
     print(f"✅ {len(candidates)} candidates: {preview}{more}")
 
-    from src.tools.mx_adapter import warm_market_cap_cache, warm_financial_metrics_cache, warm_line_items_cache
+    from src.tools.mx_adapter import warm_market_cap_cache, warm_financial_metrics_cache, warm_line_items_cache, _parse_chinese_number
+    from src.data.cache import get_cache
+    
+    # ── Pre-populate cache from screening results ────────────────────
+    cache = get_cache()
+    if not hasattr(cache, '_market_cap_cache'):
+        cache._market_cap_cache = {}
+    
+    for c in candidates:
+        cache_key = f"{c['ticker']}_{end_date}"
+        cap_val = _parse_chinese_number(c.get("mkt_cap", "0"))
+        if cap_val > 0:
+            cache._market_cap_cache[cache_key] = cap_val
+
     print(f"\n[System] Warming cache for {len(tickers)} tickers via batch queries to MX API...")
     try:
         warm_market_cap_cache(tickers, end_date)
@@ -193,12 +219,24 @@ def run_ashare_pipeline(
             if ticker in signals:
                 signals_for_ticker[agent_id] = signals[ticker]
 
+        # Fill in missing ROE from metrics cache if available
+        roe = c["roe"]
+        if not roe:
+            # We use the same cache key format as warm_financial_metrics_cache
+            metrics_key = f"{ticker}_ttm_{end_date}_10"
+            if cached_m := cache.get_financial_metrics(metrics_key):
+                # Use the most recent ROE
+                val = cached_m[0].get("return_on_equity")
+                if val:
+                    # Format as percentage string
+                    roe = f"{val:.1%}" if val < 2.0 else f"{val:.1f}%"
+
         summary.append({
             "ticker": ticker,
             "name": c["name"],
             "price": c["latest_price"],
             "pct_change": c["pct_change"],
-            "roe": c["roe"],
+            "roe": roe,
             "mkt_cap": c["mkt_cap"],
             "action": decision.get("action", "unknown"),
             "quantity": decision.get("quantity", 0),
