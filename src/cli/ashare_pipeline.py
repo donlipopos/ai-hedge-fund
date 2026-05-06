@@ -32,7 +32,7 @@ import importlib.util
 
 from src.llm.models import find_model_by_name
 from src.main import run_hedge_fund
-from src.cli.input import add_common_args, add_date_args
+from src.cli.input import add_common_args, add_date_args, select_model
 
 
 def _import_skill_module(skill_name: str, module_name: str):
@@ -128,11 +128,21 @@ def run_ashare_pipeline(
     more = " ..." if len(candidates) > 5 else ""
     print(f"✅ {len(candidates)} candidates: {preview}{more}")
 
-    from src.tools.mx_adapter import warm_market_cap_cache, warm_financial_metrics_cache
+    from src.tools.mx_adapter import warm_market_cap_cache, warm_financial_metrics_cache, warm_line_items_cache
     print(f"\n[System] Warming cache for {len(tickers)} tickers via batch queries to MX API...")
     try:
         warm_market_cap_cache(tickers, end_date)
         warm_financial_metrics_cache(tickers, end_date, period="ttm", limit=10)
+        
+        # Warm common line items used by Buffett and Liang Wenfeng agents
+        common_line_items = [
+            "net_income", "revenue", "total_assets", "total_liabilities", 
+            "shareholders_equity", "capital_expenditure", "depreciation_and_amortization", 
+            "gross_profit", "free_cash_flow", "outstanding_shares",
+            "research_and_development", "cash_and_equivalents"
+        ]
+        warm_line_items_cache(tickers, common_line_items, end_date, limit=10)
+        
         print("[System] Cache warming complete.")
     except Exception as e:
         print(f"[Warning] Cache warming failed: {e}. Falling back to single queries.")
@@ -283,6 +293,13 @@ def main(parser: argparse.ArgumentParser | None = None, args: argparse.Namespace
         args = parser.parse_args()
     selected_analysts = [a.strip() for a in args.analysts.split(",") if a.strip()]
 
+    # Use select_model helper to resolve model and provider
+    # Note: A-share pipeline defaults to MiniMax if not specified
+    model_name, model_provider = select_model(getattr(args, "ollama", False), getattr(args, "model", None))
+    if not getattr(args, "model", None) and not getattr(args, "ollama", False):
+        model_name = "MiniMax-M2.7"
+        model_provider = "MiniMax"
+
     import logging
     logging.basicConfig(level=logging.INFO, format='%(message)s')
     warnings.filterwarnings("ignore")
@@ -293,8 +310,8 @@ def main(parser: argparse.ArgumentParser | None = None, args: argparse.Namespace
         start_date=args.start_date,
         end_date=args.end_date,
         selected_analysts=selected_analysts,
-        model_name=args.model,
-        model_provider=args.model_provider,
+        model_name=model_name,
+        model_provider=model_provider,
         show_reasoning=args.show_reasoning,
         initial_cash=args.initial_cash,
     )

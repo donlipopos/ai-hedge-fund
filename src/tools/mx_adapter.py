@@ -304,7 +304,8 @@ def warm_financial_metrics_cache(tickers: list[str], end_date: str, period: str 
             f"净利润、归属于母公司股东的净利润、营业收入、营业总收入、"
             f"资产总计、负债合计、归属于母公司股东权益合计、"
             f"净利润/营业总收入(销售净利率)、销售毛利率、"
-            f"净资产收益率ROE、资产负债率、每股收益EPS(基本)"
+            f"净资产收益率ROE、资产负债率、每股收益EPS(基本)、"
+            f"市盈率TTM、市净率、市销率、股息率"
         )
         tables, titles, _, err = _mx_query_tables(query)
         if err or not tables:
@@ -342,6 +343,12 @@ def warm_financial_metrics_cache(tickers: list[str], end_date: str, period: str 
                     roe_raw = row.get("净资产收益率ROE", "")
                     debt_ratio_raw = row.get("资产负债率", "")
                     eps_raw = row.get("每股收益EPS(基本)", "")
+                    
+                    # Map PE, PB, PS, Div Yield
+                    pe = _parse_chinese_number(row.get("市盈率TTM") or row.get("PE") or "0")
+                    pb = _parse_chinese_number(row.get("市净率") or row.get("PB") or "0")
+                    ps = _parse_chinese_number(row.get("市销率") or row.get("PS") or "0")
+                    dy = _parse_chinese_number(row.get("股息率") or "0")
 
                     total_assets = _parse_chinese_number(row.get("资产总计", "0"))
                     total_debt   = _parse_chinese_number(row.get("负债合计", "0"))
@@ -357,9 +364,9 @@ def warm_financial_metrics_cache(tickers: list[str], end_date: str, period: str 
                             currency="CNY",
                             market_cap=None,
                             enterprise_value=None,
-                            price_to_earnings_ratio=None,
-                            price_to_book_ratio=None,
-                            price_to_sales_ratio=None,
+                            price_to_earnings_ratio=pe if pe > 0 else None,
+                            price_to_book_ratio=pb if pb > 0 else None,
+                            price_to_sales_ratio=ps if ps > 0 else None,
                             enterprise_value_to_ebitda_ratio=None,
                             enterprise_value_to_revenue_ratio=None,
                             free_cash_flow_yield=None,
@@ -405,6 +412,108 @@ def warm_financial_metrics_cache(tickers: list[str], end_date: str, period: str 
                 result = metrics[:limit]
                 cache_key = f"{ticker}_{period}_{end_date}_{limit}"
                 cache.set_financial_metrics(cache_key, [m.model_dump() for m in result])
+
+
+def warm_line_items_cache(
+    tickers: list[str],
+    line_items: list[str],
+    end_date: str,
+    period: str = "ttm",
+    limit: int = 10,
+) -> None:
+    """Pre-fetch and cache financial line items for multiple A-share tickers."""
+    logger.info(f"Warming line items cache for {len(tickers)} A-shares...")
+    cache = get_cache()
+    ashare_tickers = [t for t in tickers if _is_ashare(t)]
+    chunks = _chunk_tickers(ashare_tickers, chunk_size=3)
+
+    # Re-use item_map from search_line_items
+    item_map: dict[str, str] = {
+        "net_income":                    "净利润",
+        "revenue":                       "营业收入",
+        "total_assets":                  "资产计",
+        "total_liabilities":             "负债合计",
+        "shareholders_equity":           "归属于母公司股东权益合计",
+        "capital_expenditure":           "购建固定资产无形资产和其他长期资产支付的现金",
+        "depreciation_and_amortization": "折旧",
+        "gross_profit":                  "毛利润",
+        "operating_income":              "营业利润",
+        "interest_expense":              "利息支出",
+        "cash_and_equivalents":          "货币资金",
+        "outstanding_shares":            "发行在外普通股加权平均数",
+        "free_cash_flow":                "自由现金流",
+        "working_capital":               "营运资本",
+        "ebitda":                        "EBITDA",
+        "ebit":                          "息税前利润",
+        "research_and_development":      "研发费用",
+        "dividends_and_other_cash_distributions": "分配股利、利润或偿付利息支付的现金",
+        "issuance_or_purchase_of_equity_shares": "吸收投资收到的现金",
+    }
+
+    for chunk in chunks:
+        needed_tickers = []
+        needed_codes = []
+        for t in chunk:
+            cache_key = f"{t}_{period}_{end_date}_{limit}"
+            if not cache.get_line_items(cache_key):
+                needed_tickers.append(t)
+                needed_codes.append(_ticker_to_code(t))
+
+        if not needed_codes:
+            continue
+
+        needed_cn = [item_map.get(k, k) for k in line_items]
+        # MX context length limit: typically 8-10 items per batch query is safe
+        needed_str = "、".join(needed_cn[:10])
+        query = f"{'和'.join(needed_codes)}近{limit}年年度报告的{needed_str}"
+
+        tables, titles, _, err = _mx_query_tables(query)
+        if err or not tables:
+            continue
+
+        code_to_ticker = {c: t for c, t in zip(needed_codes, needed_tickers)}
+        ticker_items: dict[str, list[LineItem]] = {t: [] for t in needed_tickers}
+
+        for i, table in enumerate(tables):
+            title = table.get("sheet_name")
+            if not title:
+                title = titles[i] if i < len(titles) else ""
+            code = _extract_code_from_string(title)
+
+            if code and code in code_to_ticker:
+                ticker = code_to_ticker[code]
+                rows = table.get("rows", [])
+                if not rows:
+                    continue
+
+                seen_periods = set()
+                for row in rows:
+                    period_str = _clean_date(row.get("date", ""))
+                    if period_str in seen_periods:
+                        continue
+                    seen_periods.add(period_str)
+
+                    item_data = LineItem(
+                        ticker=ticker,
+                        report_period=period_str,
+                        period=period,
+                        currency="CNY",
+                    )
+                    # Map available fields
+                    for eng_name, cn_name in item_map.items():
+                        if cn_name in row:
+                            val = _parse_chinese_number(str(row[cn_name]))
+                            setattr(item_data, eng_name, val)
+                    
+                    ticker_items[ticker].append(item_data)
+
+        # Cache results
+        for ticker, items in ticker_items.items():
+            if items:
+                items.sort(key=lambda x: x.report_period, reverse=True)
+                result = items[:limit]
+                cache_key = f"{ticker}_{period}_{end_date}_{limit}"
+                cache.set_line_items(cache_key, [it.model_dump() for it in result])
 
 
 # ─────────────────────────────────────────────────────────────────

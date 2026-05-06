@@ -116,10 +116,12 @@ LLM_ORDER = [model.to_choice_tuple() for model in AVAILABLE_MODELS]
 OLLAMA_LLM_ORDER = [model.to_choice_tuple() for model in OLLAMA_MODELS]
 
 
-def get_model_info(model_name: str, model_provider: str) -> LLMModel | None:
+def get_model_info(model_name: str, model_provider: str | ModelProvider) -> LLMModel | None:
     """Get model information by model_name"""
+    if hasattr(model_provider, "value"):
+        model_provider = model_provider.value
     all_models = AVAILABLE_MODELS + OLLAMA_MODELS
-    return next((model for model in all_models if model.model_name == model_name and model.provider == model_provider), None)
+    return next((model for model in all_models if model.model_name == model_name and model.provider.value == model_provider), None)
 
 
 def find_model_by_name(model_name: str) -> LLMModel | None:
@@ -140,7 +142,18 @@ def get_models_list():
     ]
 
 
-def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = None) -> ChatOpenAI | ChatGroq | ChatOllama | GigaChat | None:
+def get_model(model_name: str, model_provider: ModelProvider | str, api_keys: dict = None) -> ChatOpenAI | ChatGroq | ChatOllama | GigaChat | None:
+    # Convert string to ModelProvider enum if needed
+    if isinstance(model_provider, str):
+        try:
+            # Case-insensitive lookup
+            model_provider = next(p for p in ModelProvider if p.value.lower() == model_provider.lower())
+        except StopIteration:
+            supported_providers = ", ".join([provider.value for provider in ModelProvider])
+            raise ValueError(
+                f"Unsupported model provider: {model_provider}. Supported providers: {supported_providers}"
+            )
+
     if model_provider == ModelProvider.GROQ:
         api_key = (api_keys or {}).get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
         if not api_key:
