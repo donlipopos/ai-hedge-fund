@@ -448,6 +448,7 @@ def warm_line_items_cache(
         "research_and_development":      "研发费用",
         "dividends_and_other_cash_distributions": "分配股利、利润或偿付利息支付的现金",
         "issuance_or_purchase_of_equity_shares": "吸收投资收到的现金",
+        "earnings_per_share":            "每股收益EPS(基本)",
     }
 
     for chunk in chunks:
@@ -744,6 +745,7 @@ def search_line_items(
         "research_and_development":      "研发费用",
         "dividends_and_other_cash_distributions": "分配股利、利润或偿付利息支付的现金",
         "issuance_or_purchase_of_equity_shares": "吸收投资收到的现金",
+        "earnings_per_share":            "每股收益EPS(基本)",
     }
 
     # Build a compact MX query asking for available items

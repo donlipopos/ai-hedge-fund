@@ -70,6 +70,7 @@ class LineItem(BaseModel):
     report_period: str
     period: str
     currency: str
+    earnings_per_share: float | None = None
 
     # Allow additional fields dynamically
     model_config = {"extra": "allow"}

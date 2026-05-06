@@ -139,7 +139,7 @@ def run_ashare_pipeline(
             "net_income", "revenue", "total_assets", "total_liabilities", 
             "shareholders_equity", "capital_expenditure", "depreciation_and_amortization", 
             "gross_profit", "free_cash_flow", "outstanding_shares",
-            "research_and_development", "cash_and_equivalents"
+            "research_and_development", "cash_and_equivalents", "earnings_per_share"
         ]
         warm_line_items_cache(tickers, common_line_items, end_date, limit=10)
         
