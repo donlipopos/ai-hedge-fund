@@ -17,6 +17,8 @@ import os
 import re
 import json
 import logging
+import time
+import threading
 from datetime import datetime
 from typing import Optional
 
@@ -73,6 +75,9 @@ from src.data.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Global lock to prevent concurrent requests to MX API (which has strict concurrency limits)
+_MX_API_LOCK = threading.Lock()
 
 # ─────────────────────────────────────────────────────────────────
 # Helpers
@@ -231,7 +236,10 @@ def _mx_query(query: str) -> dict:
 def _mx_query_tables(query: str) -> tuple[list, list[str], int, Optional[str]]:
     """Execute MX query and return parsed tables (same signature as MXData.parse_result)."""
     logger.info(f"Querying MX API: {query}")
-    result = MXDataWrapper.query(query)
+    with _MX_API_LOCK:
+        result = MXDataWrapper.query(query)
+        # Sleep slightly to avoid hitting MX API concurrency limits
+        time.sleep(0.5)
     return MXDataWrapper.parse_result(result)
 
 
