@@ -12,8 +12,8 @@ Usage:
         --model MiniMax-M2.7
 
 Requirements:
-    MX_APIKEY       (from mx-data skill, also in ~/.openclaw/.env)
-    MINIMAX_API_KEY (from MiniMax platform, also in ~/.openclaw/.env)
+    MX_APIKEY       (from mx-data skill, placed in project .env)
+    MINIMAX_API_KEY (from MiniMax platform, placed in project .env)
 """
 
 from __future__ import annotations
