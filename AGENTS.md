@@ -33,7 +33,7 @@ An AI-powered hedge fund proof-of-concept that leverages a multi-agent architect
 
 ### Common CLI Parameters
 All subcommands (`run`, `backtest`, `ashare`) support the following parameters:
-- `--analysts`: Comma-separated analyst keys (e.g., `warren_buffett,technicals`).
+- `--analysts`: Comma-separated analyst keys (e.g., `warren_buffett,technical_analyst`).
 - `--model`: Specific LLM model name (e.g., `gpt-4o`, `claude-3-5-sonnet-latest`).
 - `--model-provider`: LLM provider (e.g., `OpenAI`, `Anthropic`, `Google`, `DeepSeek`).
 - `--ollama`: Flag to use local Ollama models (interactive selection if no model specified).

@@ -67,6 +67,8 @@ def call_llm(
                 if parsed_result:
                     return pydantic_model(**parsed_result)
             else:
+                if isinstance(result, dict):
+                    return pydantic_model(**result)
                 return result
 
         except Exception as e:

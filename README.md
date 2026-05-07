@@ -129,7 +129,7 @@ poetry run fund run --ticker AAPL,MSFT,NVDA --model gpt-4o
 
 Specify which analysts to include via the `--analysts` flag:
 ```bash
-poetry run fund run --ticker AAPL --analysts warren_buffett,technicals
+poetry run fund run --ticker AAPL --analysts warren_buffett,technical_analyst
 ```
 
 #### Run the Backtester
@@ -154,10 +154,10 @@ poetry run fund ashare \
     --criteria "ROE大于10%且市值大于100亿的A股" \
     --max-candidates 10 \
     --end-date 2026-04-15 \
-    --analysts warren_buffett,valuation,technicals
+    --analysts warren_buffett,valuation_analyst,technical_analyst
 ```
 
-**Analyst Selection**: Use the `--analysts` flag with comma-separated IDs (e.g., `warren_buffett`, `valuation`, `technicals`, `fundamentals`, `sentiment`, `charlie_munger`).
+**Analyst Selection**: Use the `--analysts` flag with comma-separated IDs (e.g., `warren_buffett`, `valuation_analyst`, `technical_analyst`, `fundamentals_analyst`, `sentiment_analyst`, `charlie_munger`).
 
 #### 🤖 AI-Friendly Mode (JSON Output)
 For integration with other AI agents (like **OpenClaw** or **Hermes**), use the global `--json` flag to get machine-readable output and silence progress bars.

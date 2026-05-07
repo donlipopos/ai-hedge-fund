@@ -204,12 +204,20 @@ class MXData:
         if status != 0:
             return [], [], 0, f"顶层错误: 状态码 {status} - {message}"
         
-        data = result.get("data") or {}
-        inner_data = data.get("data") or {}
-        search_result = inner_data.get("searchDataResultDTO") or {}
-        dto_list = search_result.get("dataTableDTOList") or []
-        
-        if not dto_list:
+        data = result.get("data")
+        if not isinstance(data, dict):
+            return [], [], 0, "接口返回的 data 字段格式不正确或为空"
+            
+        inner_data = data.get("data")
+        if not isinstance(inner_data, dict):
+            return [], [], 0, "接口返回的 inner data 字段格式不正确或为空"
+            
+        search_result = inner_data.get("searchDataResultDTO")
+        if not isinstance(search_result, dict):
+            return [], [], 0, "接口返回中无 searchDataResultDTO 字典"
+            
+        dto_list = search_result.get("dataTableDTOList")
+        if not isinstance(dto_list, list) or not dto_list:
             return [], [], 0, "接口返回中无 dataTableDTOList"
         
         condition_parts: List[str] = []
