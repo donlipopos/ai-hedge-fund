@@ -7,7 +7,7 @@ tickers by .SH/.SZ/.BJ suffix and routes to MX.
 
 Environment:
     MX_APIKEY          — MX API key (also loaded from .env)
-    MX_SKILL_PARENT    — parent of mx-data/ skill dir (default: ~/.openclaw/workspace-trading/skills)
+    MX_SKILL_PARENT    — parent of mx-data/ skill dir (default: local skills/ folder)
 """
 
 from __future__ import annotations
