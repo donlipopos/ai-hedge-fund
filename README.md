@@ -143,7 +143,7 @@ poetry run fund backtest --tickers AAPL,MSFT,NVDA
 Note: The `--ollama`, `--start-date`, and `--end-date` flags work for the backtester as well!
 
 #### 🇨🇳 Chinese A-Share Pipeline (Experimental)
-Run analysis for Chinese A-shares using the MX API and MiniMax models.
+Run analysis for Chinese A-shares using the MX API and MiniMax models. The A-share pipeline features **robust multi-year financial history retrieval**, fully supporting complex agents like Warren Buffett and Benjamin Graham by seamlessly translating their US-centric financial data requirements into localized Chinese market data (e.g., EPS, BVPS, ROE, FCF, and valuation ratios).
 
 ```bash
 # Set the path to the skills directory (required for MX data)

@@ -29,7 +29,7 @@ An AI-powered hedge fund proof-of-concept that leverages a multi-agent architect
 - **Install Dependencies:** `poetry install`
 - **Run Hedge Fund:** `poetry run fund run --ticker AAPL,MSFT,NVDA`
 - **Run Backtester:** `poetry run fund backtest --tickers AAPL,MSFT,NVDA`
-- **A-Share Pipeline:** `poetry run fund ashare --criteria "ROE>10%"`
+- **A-Share Pipeline:** `poetry run fund ashare --criteria "ROE>10%"` (Includes robust multi-year financial history retrieval for all agents)
 
 ### Common CLI Parameters
 All subcommands (`run`, `backtest`, `ashare`) support the following parameters:
