@@ -93,6 +93,8 @@ class LineItem(BaseModel):
     operating_margin: float | None = None
     roic: float | None = None
     eps_growth: float | None = None
+    ebit: float | None = None
+    ebitda: float | None = None
 
     # Allow additional fields dynamically
     model_config = {"extra": "allow"}

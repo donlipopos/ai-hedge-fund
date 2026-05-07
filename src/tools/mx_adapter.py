@@ -383,10 +383,10 @@ def warm_financial_metrics_cache(tickers: list[str], end_date: str, period: str 
                 bvps_raw = r.get("每股净资产BPS") or r.get("每股净资产") or r.get("每股净资产(元)") or ""
 
                 # Map PE, PB, PS, Div Yield
-                pe = _parse_chinese_number(r.get("市盈率TTM") or r.get("PE") or r.get("市盈率(TTM)") or "0")
-                pb = _parse_chinese_number(r.get("市净率") or r.get("PB") or r.get("市净率(PB)") or "0")
-                ps = _parse_chinese_number(r.get("市销率") or r.get("PS") or r.get("市销率(TTM)") or "0")
-                dy = _parse_chinese_number(r.get("股息率") or r.get("股息率(%)") or "0")
+                pe = _parse_chinese_number(r.get("市盈率TTM") or r.get("PE") or r.get("市盈率(TTM)") or r.get("市盈率PE(TTM)") or "0")
+                pb = _parse_chinese_number(r.get("市净率") or r.get("PB") or r.get("市净率(PB)") or r.get("市净率PB") or "0")
+                ps = _parse_chinese_number(r.get("市销率") or r.get("PS") or r.get("市销率(TTM)") or r.get("市销率(PS)") or "0")
+                dy = _parse_chinese_number(r.get("股息率") or r.get("股息率(%)") or r.get("股息率(TTM)") or "0")
                 mkt_cap = _parse_chinese_number(r.get("总市值") or r.get("市值") or "0")
 
                 total_assets = _parse_chinese_number(r.get("资产总计") or r.get("资产总额") or r.get("资产计") or "0")
@@ -399,7 +399,7 @@ def warm_financial_metrics_cache(tickers: list[str], end_date: str, period: str 
                 shares       = _parse_chinese_number(r.get("总股本") or r.get("发行在外普通股加权平均数") or "0")
 
                 bvps         = _parse_chinese_number(bvps_raw) or ((equity / shares) if (equity and shares) else None)
-                fcf_ps       = _parse_chinese_number(r.get("每股自由现金流") or r.get("每股自由现金流(元)") or r.get("每股企业自由现金流量") or "0")
+                fcf_ps       = _parse_chinese_number(r.get("每股自由现金流") or r.get("每股自由现金流(元)") or r.get("每股企业自由现金流量") or r.get("每股股东自由现金流量") or "0")
                 rev_growth   = _parse_chinese_number(r.get("营业收入同比增长") or r.get("营收同比增长") or r.get("营业收入同比增长率") or "0")
                 earn_growth  = _parse_chinese_number(r.get("净利润同比增长") or r.get("归母净利润同比增长") or r.get("净利润同比增长率") or "0")
 
@@ -491,10 +491,10 @@ def warm_line_items_cache(
         "interest_expense":              "利息支出",
         "cash_and_equivalents":          "货币资金",
         "outstanding_shares":            "总股本 发行在外普通股加权平均数",
-        "free_cash_flow":                "自由现金流",
+        "free_cash_flow":                "自由现金流 企业自由现金流量FCFF(反推法) 经营活动产生的现金流量净额",
         "working_capital":               "营运资本",
-        "ebitda":                        "EBITDA",
-        "ebit":                          "息税前利润",
+        "ebitda":                        "EBITDA 每股息税折旧摊销前利润EBITDAPS 息税折旧摊销前利润EBITDA(正推法)",
+        "ebit":                          "息税前利润 息税前利润(TTM)",
         "research_and_development":      "研发费用",
         "dividends_and_other_cash_distributions": "分配股利、利润或偿付利息支付的现金",
         "issuance_or_purchase_of_equity_shares": "吸收投资收到的现金 回购股份",
@@ -558,11 +558,13 @@ def warm_line_items_cache(
                         period=period,
                         currency="CNY",
                     )
-                    # Map available fields
-                    for eng_name, cn_name in item_map.items():
-                        if cn_name in row:
-                            val = _parse_chinese_number(str(row[cn_name]))
-                            setattr(item_data, eng_name, val)
+                    # Map available fields back using synonyms
+                    for eng_name, cn_synonyms in item_map.items():
+                        for cn_name in cn_synonyms.split():
+                            if cn_name in r:
+                                val = _parse_chinese_number(str(r[cn_name]))
+                                setattr(item_data, eng_name, val)
+                                break
                     
                     # Compute derived fields if not directly returned by MX
                     if item_data.operating_margin is None and item_data.operating_income and item_data.revenue:
@@ -571,6 +573,12 @@ def warm_line_items_cache(
                         item_data.roic = item_data.net_income / (item_data.total_assets - item_data.current_liabilities)
                     if item_data.book_value_per_share is None and item_data.shareholders_equity and item_data.outstanding_shares:
                         item_data.book_value_per_share = item_data.shareholders_equity / item_data.outstanding_shares
+                    
+                    # Handle EBIT/EBITDA per share logic
+                    if item_data.ebitda and item_data.ebitda < 500 and item_data.outstanding_shares:
+                        item_data.ebitda = item_data.ebitda * item_data.outstanding_shares
+                    if item_data.ebit and item_data.ebit < 500 and item_data.outstanding_shares:
+                        item_data.ebit = item_data.ebit * item_data.outstanding_shares
 
                     ticker_items[ticker].append(item_data)
 
@@ -871,10 +879,10 @@ def search_line_items(
         "interest_expense":              "利息支出",
         "cash_and_equivalents":          "货币资金",
         "outstanding_shares":            "总股本 发行在外普通股加权平均数",
-        "free_cash_flow":                "自由现金流",
+        "free_cash_flow":                "自由现金流 企业自由现金流量FCFF(反推法) 经营活动产生的现金流量净额",
         "working_capital":               "营运资本",
-        "ebitda":                        "EBITDA",
-        "ebit":                          "息税前利润",
+        "ebitda":                        "EBITDA 每股息税折旧摊销前利润EBITDAPS 息税折旧摊销前利润EBITDA(正推法)",
+        "ebit":                          "息税前利润 息税前利润(TTM)",
         "research_and_development":      "研发费用",
         "dividends_and_other_cash_distributions": "分配股利、利润或偿付利息支付的现金",
         "issuance_or_purchase_of_equity_shares": "吸收投资收到的现金 回购股份",
@@ -905,9 +913,16 @@ def search_line_items(
         fieldnames = table.get("fieldnames", [])
 
         for row in rows:
-            period_str = _clean_date(row.get("date", ""))
-            # Skip rows/tables that don't have a valid date/period
-            if not period_str or period_str in seen_periods or len(period_str) < 4:
+            if not isinstance(row, dict):
+                continue
+            # MX sometimes returns keys with leading/trailing spaces
+            r = {k.strip(): v for k, v in row.items()}
+
+            period_str = _clean_date(r.get("date", ""))
+            # Skip invalid dates or daily dates (must be quarter-end: 03-31, 06-30, 09-30, 12-31)
+            if not period_str or len(period_str) < 10 or not any(period_str.endswith(q) for q in ("-03-31", "-06-30", "-09-30", "-12-31")):
+                continue
+            if period_str in seen_periods:
                 continue
             seen_periods.add(period_str)
 
@@ -917,10 +932,13 @@ def search_line_items(
                 period=period,
                 currency="CNY",
             )
-            # Map available fields back
-            for eng_name, cn_name in item_map.items():
-                if cn_name in row:
-                    setattr(item_data, eng_name, _parse_chinese_number(str(row[cn_name])))
+            # Map available fields back using synonyms
+            for eng_name, cn_synonyms in item_map.items():
+                for cn_name in cn_synonyms.split():
+                    if cn_name in r:
+                        val = _parse_chinese_number(str(r[cn_name]))
+                        setattr(item_data, eng_name, val)
+                        break
             
             # Compute derived fields if not directly returned by MX
             if item_data.operating_margin is None and item_data.operating_income and item_data.revenue:
@@ -929,6 +947,16 @@ def search_line_items(
                 item_data.roic = item_data.net_income / (item_data.total_assets - item_data.current_liabilities)
             if item_data.book_value_per_share is None and item_data.shareholders_equity and item_data.outstanding_shares:
                 item_data.book_value_per_share = item_data.shareholders_equity / item_data.outstanding_shares
+            
+            # Handle EBIT/EBITDA per share logic
+            # If the value found was actually per share (heuristic: value < 1000 and ticker has large cap)
+            # Actually MX usually returns absolute values in '亿元' but sometimes per share in '元'
+            # We check the raw string or the magnitude
+            if item_data.ebitda and item_data.ebitda < 500 and item_data.outstanding_shares:
+                # Likely per share
+                item_data.ebitda = item_data.ebitda * item_data.outstanding_shares
+            if item_data.ebit and item_data.ebit < 500 and item_data.outstanding_shares:
+                item_data.ebit = item_data.ebit * item_data.outstanding_shares
 
             results.append(item_data)
 
