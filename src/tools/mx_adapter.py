@@ -870,6 +870,12 @@ def search_line_items(
     if not _is_ashare(ticker):
         return []
 
+    # Check local cache first
+    cache = get_cache()
+    cache_key = f"{ticker}_{period}_{end_date}_{limit}"
+    if cached := cache.get_line_items(cache_key):
+        return [LineItem(**m) for m in cached]
+
     code = _ticker_to_code(ticker)
 
     # Map English line item names to Chinese MX queries
@@ -971,7 +977,10 @@ def search_line_items(
             results.append(item_data)
 
     results.sort(key=lambda i: i.report_period, reverse=True)
-    return results[:limit]
+    final_results = results[:limit]
+    if final_results:
+        cache.set_line_items(cache_key, [it.model_dump() for it in final_results])
+    return final_results
 
 
 def get_market_cap(
@@ -1040,6 +1049,12 @@ def get_company_news(
     """Fetch recent news for an A-share ticker via MX."""
     if not _is_ashare(ticker):
         return []
+        
+    cache = get_cache()
+    cache_key = f"{ticker}_{end_date}_{limit}"
+    if cached := cache.get_company_news(cache_key):
+        return [CompanyNews(**n) for n in cached]
+
     code = _ticker_to_code(ticker)
     query = f"{code}相关的最新新闻"
     tables, _, _, err = _mx_query_tables(query)
@@ -1063,7 +1078,10 @@ def get_company_news(
                     results.append(CompanyNews(ticker=ticker, title=title, date=date, url=url, source=source))
                 except Exception as e:
                     logger.warning(f"Error creating CompanyNews for {ticker}: {e}")
-    return results[:limit]
+    final_results = results[:limit]
+    if final_results:
+        cache.set_company_news(cache_key, [n.model_dump() for n in final_results])
+    return final_results
 
 
 def get_insider_trades(
@@ -1076,6 +1094,12 @@ def get_insider_trades(
     """Fetch insider trading activity for an A-share ticker via MX."""
     if not _is_ashare(ticker):
         return []
+        
+    cache = get_cache()
+    cache_key = f"{ticker}_{end_date}_{limit}"
+    if cached := cache.get_insider_trades(cache_key):
+        return [InsiderTrade(**t) for t in cached]
+
     code = _ticker_to_code(ticker)
     query = f"{code}最近的高管持股变动和增减持情况"
     tables, _, _, err = _mx_query_tables(query)
@@ -1108,7 +1132,10 @@ def get_insider_trades(
                 ))
             except Exception as e:
                 logger.warning(f"Error creating InsiderTrade for {ticker}: {e}")
-    return results[:limit]
+    final_results = results[:limit]
+    if final_results:
+        cache.set_insider_trades(cache_key, [t.model_dump() for t in final_results])
+    return final_results
 
 
 def prices_to_df(prices: list[Price]) -> "pd.DataFrame":  # noqa: F821
