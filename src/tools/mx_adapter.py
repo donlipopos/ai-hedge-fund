@@ -399,6 +399,7 @@ def warm_financial_metrics_cache(tickers: list[str], end_date: str, period: str 
 
                 total_assets = _parse_chinese_number(r.get("资产总计") or r.get("资产总额") or r.get("资产计") or "0")
                 total_liab   = _parse_chinese_number(r.get("负债合计") or r.get("负债总额") or "0")
+                current_assets = _parse_chinese_number(r.get("流动资产合计") or r.get("流动资产") or "0")
                 current_liab = _parse_chinese_number(r.get("流动负债合计") or r.get("流动负债") or "0")
                 equity       = _parse_chinese_number(r.get("归属于母公司股东权益合计") or r.get("净资产") or "0") or (total_assets - total_liab)
                 revenue      = _parse_chinese_number(r.get("营业收入") or r.get("营收") or r.get("营业总收入") or "0")
@@ -426,20 +427,20 @@ def warm_financial_metrics_cache(tickers: list[str], end_date: str, period: str 
                         enterprise_value_to_revenue_ratio=None,
                         free_cash_flow_yield=dy if dy > 0 else None,
 
-                        peg_ratio=None,
+                        peg_ratio=(pe / (earn_growth * 100)) if pe > 0 and earn_growth and earn_growth > 0 else None,
                         gross_margin=_parse_chinese_number(gross_margin_raw),
                         operating_margin=(op_income / revenue) if revenue else None,
                         net_margin=_parse_chinese_number(net_margin_raw),
                         return_on_equity=_parse_chinese_number(roe_raw),
                         return_on_assets=(net_income / total_assets) if total_assets else None,
                         return_on_invested_capital=(net_income / (total_assets - current_liab)) if (total_assets and total_assets > current_liab) else None,
-                        asset_turnover=None,
+                        asset_turnover=(revenue / total_assets) if total_assets else None,
                         inventory_turnover=None,
                         receivables_turnover=None,
                         days_sales_outstanding=None,
                         operating_cycle=None,
                         working_capital_turnover=None,
-                        current_ratio=None,
+                        current_ratio=(current_assets / current_liab) if current_liab else None,
                         quick_ratio=None,
                         cash_ratio=None,
                         operating_cash_flow_ratio=None,
@@ -784,6 +785,7 @@ def get_financial_metrics(
 
         total_assets = _parse_chinese_number(r.get("资产总计") or r.get("资产总额") or r.get("资产计") or "0")
         total_liab   = _parse_chinese_number(r.get("负债合计") or r.get("负债总额") or "0")
+        current_assets = _parse_chinese_number(r.get("流动资产合计") or r.get("流动资产") or "0")
         current_liab = _parse_chinese_number(r.get("流动负债合计") or r.get("流动负债") or "0")
         equity       = _parse_chinese_number(r.get("归属于母公司股东权益合计") or r.get("净资产") or "0") or (total_assets - total_liab)
         revenue      = _parse_chinese_number(r.get("营业收入") or r.get("营收") or r.get("营业总收入") or "0")
@@ -792,7 +794,7 @@ def get_financial_metrics(
         shares       = _parse_chinese_number(r.get("总股本") or r.get("发行在外普通股加权平均数") or "0")
 
         bvps         = _parse_chinese_number(bvps_raw) or ((equity / shares) if (equity and shares) else None)
-        fcf_ps       = _parse_chinese_number(r.get("每股自由现金流") or r.get("每股自由现金流(元)") or r.get("每股企业自由现金流量") or "0")
+        fcf_ps       = _parse_chinese_number(r.get("每股自由现金流") or r.get("每股自由现金流(元)") or r.get("每股企业自由现金流量") or r.get("每股股东自由现金流量") or "0")
         rev_growth   = _parse_chinese_number(r.get("营业收入同比增长") or r.get("营收同比增长") or r.get("营业收入同比增长率") or "0")
         earn_growth  = _parse_chinese_number(r.get("净利润同比增长") or r.get("归母净利润同比增长") or r.get("净利润同比增长率") or "0")
 
@@ -811,20 +813,20 @@ def get_financial_metrics(
                 enterprise_value_to_revenue_ratio=None,
                 free_cash_flow_yield=dy if dy > 0 else None,
 
-                peg_ratio=None,
+                peg_ratio=(pe / (earn_growth * 100)) if pe > 0 and earn_growth and earn_growth > 0 else None,
                 gross_margin=_parse_chinese_number(gross_margin_raw),
                 operating_margin=(op_income / revenue) if revenue else None,
                 net_margin=_parse_chinese_number(net_margin_raw),
                 return_on_equity=_parse_chinese_number(roe_raw),
                 return_on_assets=(net_income / total_assets) if total_assets else None,
                 return_on_invested_capital=(net_income / (total_assets - current_liab)) if (total_assets and total_assets > current_liab) else None,
-                asset_turnover=None,
+                asset_turnover=(revenue / total_assets) if total_assets else None,
                 inventory_turnover=None,
                 receivables_turnover=None,
                 days_sales_outstanding=None,
                 operating_cycle=None,
                 working_capital_turnover=None,
-                current_ratio=None,
+                current_ratio=(current_assets / current_liab) if current_liab else None,
                 quick_ratio=None,
                 cash_ratio=None,
                 operating_cash_flow_ratio=None,
