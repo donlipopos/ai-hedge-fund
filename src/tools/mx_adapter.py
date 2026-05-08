@@ -344,7 +344,7 @@ def warm_financial_metrics_cache(tickers: list[str], end_date: str, period: str 
                     if not rows: continue
                     
                     # Heuristic for financial report tables
-                    financial_keys = {"净利润", "营业收入", "每股收益", "每股净资产", "ROE", "资产总计"}
+                    financial_keys = {"净利润", "营业收入", "每股收益", "每股净资产", "ROE", "资产总计", "市盈率", "EBITDA"}
                     if (not any(k in "".join(fieldnames) for k in financial_keys) or 
                         any(re.search(r"\d{4}[.-]\d{2}[.-]\d{2}", f) for f in fieldnames)):
                         continue
@@ -356,19 +356,19 @@ def warm_financial_metrics_cache(tickers: list[str], end_date: str, period: str 
                         if any("预测" in k for k in r_clean.keys()):
                             continue
                             
-                        period = _clean_date(r_clean.get("date", ""))
+                        extracted_period = _clean_date(r_clean.get("date", ""))
                         # Skip invalid dates or daily dates (must be quarter-end)
-                        if not period or len(period) < 10 or not any(period.endswith(q) for q in ("-03-31", "-06-30", "-09-30", "-12-31")):
+                        if not extracted_period or len(extracted_period) < 10 or not any(extracted_period.endswith(q) for q in ("-03-31", "-06-30", "-09-30", "-12-31")):
                             continue
                         # Skip future dates
                         try:
-                            if int(period[:4]) > datetime.now().year + 1: continue
+                            if int(extracted_period[:4]) > datetime.now().year + 1: continue
                         except: pass
 
-                        if period not in ticker_period_data[ticker]:
-                            ticker_period_data[ticker][period] = r_clean
+                        if extracted_period not in ticker_period_data[ticker]:
+                            ticker_period_data[ticker][extracted_period] = r_clean
                         else:
-                            ticker_period_data[ticker][period].update(r_clean)
+                            ticker_period_data[ticker][extracted_period].update(r_clean)
 
         # Build FinancialMetrics objects
         ticker_metrics: dict[str, list[FinancialMetrics]] = {t: [] for t in needed_tickers}
@@ -507,9 +507,9 @@ def warm_line_items_cache(
         "research_and_development":      "研发费用",
         "dividends_and_other_cash_distributions": "分配股利、利润或偿付利息支付的现金",
         "issuance_or_purchase_of_equity_shares": "吸收投资收到的现金 回购股份",
-        "earnings_per_share":            "基本每股收益 EPS",
-        "book_value_per_share":          "每股净资产",
-        "free_cash_flow_per_share":      "每股自由现金流",
+        "earnings_per_share":            "基本每股收益 EPS 每股收益EPS(基本)",
+        "book_value_per_share":          "每股净资产 每股净资产BPS 每股净资产(元)",
+        "free_cash_flow_per_share":      "每股自由现金流 每股自由现金流(元) 每股企业自由现金流量",
         "revenue_growth":                "营业收入同比增长",
         "earnings_growth":               "净利润同比增长",
     }
@@ -731,7 +731,7 @@ def get_financial_metrics(
             # Heuristic for financial report tables: 
             # - Must have core financial keys
             # - Fieldnames should NOT contain specific daily dates (e.g. 2026.05.06)
-            financial_keys = {"净利润", "营业收入", "每股收益", "每股净资产", "ROE", "资产总计"}
+            financial_keys = {"净利润", "营业收入", "每股收益", "每股净资产", "ROE", "资产总计", "市盈率", "EBITDA"}
             has_fin = any(k in "".join(fieldnames) for k in financial_keys)
             has_daily = any(re.search(r"\d{4}[.-]\d{2}[.-]\d{2}", f) for f in fieldnames)
             
@@ -745,19 +745,19 @@ def get_financial_metrics(
                 if sum(1 for k in r_clean.keys() if re.search(r"\d{4}[.-]\d{2}[.-]\d{2}", k)) > 2:
                     continue
                     
-                period = _clean_date(r_clean.get("date", ""))
+                extracted_period = _clean_date(r_clean.get("date", ""))
                 # Skip invalid dates or daily dates (must be quarter-end: 03-31, 06-30, 09-30, 12-31)
-                if not period or len(period) < 10 or not any(period.endswith(q) for q in ("-03-31", "-06-30", "-09-30", "-12-31")):
+                if not extracted_period or len(extracted_period) < 10 or not any(extracted_period.endswith(q) for q in ("-03-31", "-06-30", "-09-30", "-12-31")):
                     continue
                 # Skip future dates
                 try:
-                    if int(period[:4]) > datetime.now().year + 1: continue
+                    if int(extracted_period[:4]) > datetime.now().year + 1: continue
                 except: pass
                 
-                if period not in period_data:
-                    period_data[period] = r_clean
+                if extracted_period not in period_data:
+                    period_data[extracted_period] = r_clean
                 else:
-                    period_data[period].update(r_clean)
+                    period_data[extracted_period].update(r_clean)
 
     # Sort periods descending
     sorted_periods = sorted(period_data.keys(), reverse=True)
@@ -896,9 +896,9 @@ def search_line_items(
         "research_and_development":      "研发费用",
         "dividends_and_other_cash_distributions": "分配股利、利润或偿付利息支付的现金",
         "issuance_or_purchase_of_equity_shares": "吸收投资收到的现金 回购股份",
-        "earnings_per_share":            "基本每股收益 EPS",
-        "book_value_per_share":          "每股净资产",
-        "free_cash_flow_per_share":      "每股自由现金流",
+        "earnings_per_share":            "基本每股收益 EPS 每股收益EPS(基本)",
+        "book_value_per_share":          "每股净资产 每股净资产BPS 每股净资产(元)",
+        "free_cash_flow_per_share":      "每股自由现金流 每股自由现金流(元) 每股企业自由现金流量",
         "revenue_growth":                "营业收入同比增长",
         "earnings_growth":               "净利润同比增长",
     }
